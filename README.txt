@@ -1,1 +1,1 @@
-This is just to start something. (SEE: MICHAEL JACKSON: WANNA BE STARTIN' SOMETHING')
+The dut file contains both parts of the SPI module (controller and peripheral). Source: nandland.
