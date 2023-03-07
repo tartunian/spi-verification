@@ -1,16 +1,16 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Description: SPI (Serial Peripheral Interface) Master
-//              Creates master based on input configuration.
-//              Sends a byte one bit at a time on MOSI
-//              Will also receive byte data one bit at a time on MISO.
-//              Any data on input byte will be shipped out on MOSI.
+// Description: SPI (Serial Peripheral Interface) Controller
+//              Creates Controller based on input configuration.
+//              Sends a byte one bit at a time on PICO
+//              Will also receive byte data one bit at a time on POCI.
+//              Any data on input byte will be shipped out on PICO.
 //
 //              To kick-off transaction, user must pulse i_TX_DV.
 //              This module supports multi-byte transmissions by pulsing
 //              i_TX_DV and loading up i_TX_Byte when o_TX_Ready is high.
 //
-//              This module is only responsible for controlling Clk, MOSI, 
-//              and MISO.  If the SPI peripheral requires a chip-select, 
+//              This module is only responsible for controlling Clk, PICO, 
+//              and POCI.  If the SPI peripheral requires a chip-select, 
 //              this must be done at a higher level.
 //
 // Note:        i_Clk must be at least 2x faster than i_SPI_Clk
@@ -30,7 +30,7 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-module SPI_Master
+module SPI_Controller
   #(parameter SPI_MODE = 0,
     parameter CLKS_PER_HALF_BIT = 2)
   (
@@ -38,19 +38,19 @@ module SPI_Master
    input        i_Rst_L,     // FPGA Reset
    input        i_Clk,       // FPGA Clock
    
-   // TX (MOSI) Signals
-   input [7:0]  i_TX_Byte,        // Byte to transmit on MOSI
+   // TX (PICO) Signals
+   input [7:0]  i_TX_Byte,        // Byte to transmit on PICO
    input        i_TX_DV,          // Data Valid Pulse with i_TX_Byte
    output reg   o_TX_Ready,       // Transmit Ready for next byte
    
-   // RX (MISO) Signals
+   // RX (POCI) Signals
    output reg       o_RX_DV,     // Data Valid pulse (1 clock cycle)
-   output reg [7:0] o_RX_Byte,   // Byte received on MISO
+   output reg [7:0] o_RX_Byte,   // Byte received on POCI
 
    // SPI Interface
    output reg o_SPI_Clk,
-   input      i_SPI_MISO,
-   output reg o_SPI_MOSI
+   input      i_SPI_POCI,
+   output reg o_SPI_PICO
    );
 
   // SPI Interface (All Runs at SPI Clock Domain)
@@ -159,13 +159,13 @@ module SPI_Master
   end // always @ (posedge i_Clk or negedge i_Rst_L)
 
 
-  // Purpose: Generate MOSI data
+  // Purpose: Generate PICO data
   // Works with both CPHA=0 and CPHA=1
   always @(posedge i_Clk or negedge i_Rst_L)
   begin
     if (~i_Rst_L)
     begin
-      o_SPI_MOSI     <= 1'b0;
+      o_SPI_PICO     <= 1'b0;
       r_TX_Bit_Count <= 3'b111; // send MSb first
     end
     else
@@ -178,19 +178,19 @@ module SPI_Master
       // Catch the case where we start transaction and CPHA = 0
       else if (r_TX_DV & ~w_CPHA)
       begin
-        o_SPI_MOSI     <= r_TX_Byte[3'b111];
+        o_SPI_PICO     <= r_TX_Byte[3'b111];
         r_TX_Bit_Count <= 3'b110;
       end
       else if ((r_Leading_Edge & w_CPHA) | (r_Trailing_Edge & ~w_CPHA))
       begin
         r_TX_Bit_Count <= r_TX_Bit_Count - 1'b1;
-        o_SPI_MOSI     <= r_TX_Byte[r_TX_Bit_Count];
+        o_SPI_PICO     <= r_TX_Byte[r_TX_Bit_Count];
       end
     end
   end
 
 
-  // Purpose: Read in MISO data.
+  // Purpose: Read in POCI data.
   always @(posedge i_Clk or negedge i_Rst_L)
   begin
     if (~i_Rst_L)
@@ -211,7 +211,7 @@ module SPI_Master
       end
       else if ((r_Leading_Edge & ~w_CPHA) | (r_Trailing_Edge & w_CPHA))
       begin
-        o_RX_Byte[r_RX_Bit_Count] <= i_SPI_MISO;  // Sample data
+        o_RX_Byte[r_RX_Bit_Count] <= i_SPI_POCI;  // Sample data
         r_RX_Bit_Count            <= r_RX_Bit_Count - 1'b1;
         if (r_RX_Bit_Count == 3'b000)
         begin
@@ -236,4 +236,4 @@ module SPI_Master
   end // always @ (posedge i_Clk or negedge i_Rst_L)
   
 
-endmodule // SPI_Master
+endmodule // SPI_Controller

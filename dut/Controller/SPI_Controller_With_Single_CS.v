@@ -1,10 +1,10 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Description: SPI (Serial Peripheral Interface) Master
-//              With single chip-select (AKA Slave Select) capability
+// Description: SPI (Serial Peripheral Interface) Controller
+//              With single chip-select (AKA Peripheral Select) capability
 //
 //              Supports arbitrary length byte transfers.
 // 
-//              Instantiates a SPI Master and adds single CS.
+//              Instantiates a SPI Controller and adds single CS.
 //              If multiple CS signals are needed, will need to use different
 //              module, OR multiplex the CS from this at a higher level.
 //
@@ -32,7 +32,7 @@
 //              time when CS is high between trasnfers.
 ///////////////////////////////////////////////////////////////////////////////
 
-module SPI_Master_With_Single_CS
+module SPI_Controller_With_Single_CS
   #(parameter SPI_MODE = 0,
     parameter CLKS_PER_HALF_BIT = 2,
     parameter MAX_BYTES_PER_CS = 2,
@@ -42,21 +42,21 @@ module SPI_Master_With_Single_CS
    input        i_Rst_L,     // FPGA Reset
    input        i_Clk,       // FPGA Clock
    
-   // TX (MOSI) Signals
+   // TX (PICO) Signals
    input [$clog2(MAX_BYTES_PER_CS+1)-1:0] i_TX_Count,  // # bytes per CS low
-   input [7:0]  i_TX_Byte,       // Byte to transmit on MOSI
+   input [7:0]  i_TX_Byte,       // Byte to transmit on PICO
    input        i_TX_DV,         // Data Valid Pulse with i_TX_Byte
    output       o_TX_Ready,      // Transmit Ready for next byte
    
-   // RX (MISO) Signals
+   // RX (POCI) Signals
    output reg [$clog2(MAX_BYTES_PER_CS+1)-1:0] o_RX_Count,  // Index RX byte
    output       o_RX_DV,     // Data Valid pulse (1 clock cycle)
-   output [7:0] o_RX_Byte,   // Byte received on MISO
+   output [7:0] o_RX_Byte,   // Byte received on POCI
 
    // SPI Interface
    output o_SPI_Clk,
-   input  i_SPI_MISO,
-   output o_SPI_MOSI,
+   input  i_SPI_POCI,
+   output o_SPI_PICO,
    output o_SPI_CS_n
    );
 
@@ -68,31 +68,31 @@ module SPI_Master_With_Single_CS
   reg r_CS_n;
   reg [$clog2(CS_INACTIVE_CLKS)-1:0] r_CS_Inactive_Count;
   reg [$clog2(MAX_BYTES_PER_CS+1)-1:0] r_TX_Count;
-  wire w_Master_Ready;
+  wire w_Controller_Ready;
 
-  // Instantiate Master
-  SPI_Master 
+  // Instantiate Controller
+  SPI_Controller 
     #(.SPI_MODE(SPI_MODE),
       .CLKS_PER_HALF_BIT(CLKS_PER_HALF_BIT)
-      ) SPI_Master_Inst
+      ) SPI_Controller_Inst
    (
    // Control/Data Signals,
    .i_Rst_L(i_Rst_L),     // FPGA Reset
    .i_Clk(i_Clk),         // FPGA Clock
    
-   // TX (MOSI) Signals
+   // TX (PICO) Signals
    .i_TX_Byte(i_TX_Byte),         // Byte to transmit
    .i_TX_DV(i_TX_DV),             // Data Valid Pulse 
-   .o_TX_Ready(w_Master_Ready),   // Transmit Ready for Byte
+   .o_TX_Ready(w_Controller_Ready),   // Transmit Ready for Byte
    
-   // RX (MISO) Signals
+   // RX (POCI) Signals
    .o_RX_DV(o_RX_DV),       // Data Valid pulse (1 clock cycle)
-   .o_RX_Byte(o_RX_Byte),   // Byte received on MISO
+   .o_RX_Byte(o_RX_Byte),   // Byte received on POCI
 
    // SPI Interface
    .o_SPI_Clk(o_SPI_Clk),
-   .i_SPI_MISO(i_SPI_MISO),
-   .o_SPI_MOSI(o_SPI_MOSI)
+   .i_SPI_POCI(i_SPI_POCI),
+   .o_SPI_PICO(o_SPI_PICO)
    );
 
 
@@ -123,7 +123,7 @@ module SPI_Master_With_Single_CS
       TRANSFER:
         begin
           // Wait until SPI is done transferring do next thing
-          if (w_Master_Ready)
+          if (w_Controller_Ready)
           begin
             if (r_TX_Count > 0)
             begin
@@ -138,7 +138,7 @@ module SPI_Master_With_Single_CS
               r_CS_Inactive_Count <= CS_INACTIVE_CLKS;
               r_SM_CS             <= CS_INACTIVE;
             end // else: !if(r_TX_Count > 0)
-          end // if (w_Master_Ready)
+          end // if (w_Controller_Ready)
         end // case: TRANSFER
 
       CS_INACTIVE:
@@ -180,7 +180,7 @@ module SPI_Master_With_Single_CS
 
   assign o_SPI_CS_n = r_CS_n;
 
-  assign o_TX_Ready  = ((r_SM_CS == IDLE) | (r_SM_CS == TRANSFER && w_Master_Ready == 1'b1 && r_TX_Count > 0)) & ~i_TX_DV;
+  assign o_TX_Ready  = ((r_SM_CS == IDLE) | (r_SM_CS == TRANSFER && w_Controller_Ready == 1'b1 && r_TX_Count > 0)) & ~i_TX_DV;
 
-endmodule // SPI_Master_With_Single_CS
+endmodule // SPI_Controller_With_Single_CS
 

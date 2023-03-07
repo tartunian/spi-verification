@@ -1,15 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Description: SPI (Serial Peripheral Interface) Slave
-//              Creates slave based on input configuration.
-//              Receives a byte one bit at a time on MOSI
-//              Will also push out byte data one bit at a time on MISO.  
-//              Any data on input byte will be shipped out on MISO.
+// Description: SPI (Serial Peripheral Interface) Peripheral
+//              Creates Peripheral based on input configuration.
+//              Receives a byte one bit at a time on PICO
+//              Will also push out byte data one bit at a time on POCI.  
+//              Any data on input byte will be shipped out on POCI.
 //              Supports multiple bytes per transaction when CS_n is kept 
 //              low during the transaction.
 //
 // Note:        i_Clk must be at least 4x faster than i_SPI_Clk
-//              MISO is tri-stated when not communicating.  Allows for multiple
-//              SPI Slaves on the same interface.
+//              POCI is tri-stated when not communicating.  Allows for multiple
+//              SPI Peripherals on the same interface.
 //
 // Parameters:  SPI_MODE, can be 0, 1, 2, or 3.  See above.
 //              Can be configured in one of 4 modes:
@@ -21,21 +21,21 @@
 //              More info: https://en.wikipedia.org/wiki/Serial_Peripheral_Interface_Bus#Mode_numbers
 ///////////////////////////////////////////////////////////////////////////////
 
-module SPI_Slave
+module SPI_Peripheral
   #(parameter SPI_MODE = 0)
   (
    // Control/Data Signals,
    input            i_Rst_L,    // FPGA Reset, active low
    input            i_Clk,      // FPGA Clock
    output reg       o_RX_DV,    // Data Valid pulse (1 clock cycle)
-   output reg [7:0] o_RX_Byte,  // Byte received on MOSI
+   output reg [7:0] o_RX_Byte,  // Byte received on PICO
    input            i_TX_DV,    // Data Valid pulse to register i_TX_Byte
-   input  [7:0]     i_TX_Byte,  // Byte to serialize to MISO.
+   input  [7:0]     i_TX_Byte,  // Byte to serialize to POCI.
 
    // SPI Interface
    input      i_SPI_Clk,
-   output reg o_SPI_MISO,
-   input      i_SPI_MOSI,
+   output reg o_SPI_POCI,
+   input      i_SPI_PICO,
    input      i_SPI_CS_n        // active low
    );
 
@@ -44,7 +44,7 @@ module SPI_Slave
   wire w_CPOL;     // Clock polarity
   wire w_CPHA;     // Clock phase
   wire w_SPI_Clk;  // Inverted/non-inverted depending on settings
-  wire w_SPI_MISO_Mux;
+  wire w_SPI_POCI_Mux;
   
   reg [2:0] r_RX_Bit_Count;
   reg [2:0] r_TX_Bit_Count;
@@ -52,7 +52,7 @@ module SPI_Slave
   reg [7:0] r_RX_Byte;
   reg r_RX_Done, r2_RX_Done, r3_RX_Done;
   reg [7:0] r_TX_Byte;
-  reg r_SPI_MISO_Bit, r_Preload_MISO;
+  reg r_SPI_POCI_Bit, r_Preload_POCI;
 
   // CPOL: Clock Polarity
   // CPOL=0 means clock idles at 0, leading edge is rising edge.
@@ -84,12 +84,12 @@ module SPI_Slave
       r_RX_Bit_Count <= r_RX_Bit_Count + 1;
 
       // Receive in LSB, shift up to MSB
-      r_Temp_RX_Byte <= {r_Temp_RX_Byte[6:0], i_SPI_MOSI};
+      r_Temp_RX_Byte <= {r_Temp_RX_Byte[6:0], i_SPI_PICO};
     
       if (r_RX_Bit_Count == 3'b111)
       begin
         r_RX_Done <= 1'b1;
-        r_RX_Byte <= {r_Temp_RX_Byte[6:0], i_SPI_MOSI};
+        r_RX_Byte <= {r_Temp_RX_Byte[6:0], i_SPI_PICO};
       end
       else if (r_RX_Bit_Count == 3'b010)
       begin
@@ -139,24 +139,24 @@ module SPI_Slave
   begin
     if (i_SPI_CS_n)
     begin
-      r_Preload_MISO <= 1'b1;
+      r_Preload_POCI <= 1'b1;
     end
     else
     begin
-      r_Preload_MISO <= 1'b0;
+      r_Preload_POCI <= 1'b0;
     end
   end
 
 
   // Purpose: Transmits 1 SPI Byte whenever SPI clock is toggling
-  // Will transmit read data back to SW over MISO line.
+  // Will transmit read data back to SW over POCI line.
   // Want to put data on the line immediately when CS goes low.
   always @(posedge w_SPI_Clk or posedge i_SPI_CS_n)
   begin
     if (i_SPI_CS_n)
     begin
       r_TX_Bit_Count <= 3'b111;  // Send MSb first
-      r_SPI_MISO_Bit <= r_TX_Byte[3'b111];  // Reset to MSb
+      r_SPI_POCI_Bit <= r_TX_Byte[3'b111];  // Reset to MSb
     end
     else
     begin
@@ -164,14 +164,14 @@ module SPI_Slave
 
       // Here is where data crosses clock domains from i_Clk to w_SPI_Clk
       // Can set up a timing constraint with wide margin for data path.
-      r_SPI_MISO_Bit <= r_TX_Byte[r_TX_Bit_Count];
+      r_SPI_POCI_Bit <= r_TX_Byte[r_TX_Bit_Count];
 
     end // else: !if(i_SPI_CS_n)
   end // always @ (negedge w_SPI_Clk or posedge i_SPI_CS_n_SW)
 
 
   // Purpose: Register TX Byte when DV pulse comes.  Keeps registed byte in 
-  // this module to get serialized and sent back to master.
+  // this module to get serialized and sent back to Controller.
   always @(posedge i_Clk or negedge i_Rst_L)
   begin
     if (~i_Rst_L)
@@ -187,11 +187,11 @@ module SPI_Slave
     end // else: !if(~i_Rst_L)
   end // always @ (posedge i_Clk or negedge i_Rst_L)
 
-  // Preload MISO with top bit of send data when preload selector is high.
-  // Otherwise just send the normal MISO data
-  assign w_SPI_MISO_Mux = r_Preload_MISO ? r_TX_Byte[3'b111] : r_SPI_MISO_Bit;
+  // Preload POCI with top bit of send data when preload selector is high.
+  // Otherwise just send the normal POCI data
+  assign w_SPI_POCI_Mux = r_Preload_POCI ? r_TX_Byte[3'b111] : r_SPI_POCI_Bit;
 
-  // Tri-state MISO when CS is high.  Allows for multiple slaves to talk.
-  assign o_SPI_MISO = i_SPI_CS_n ? 1'bZ : w_SPI_MISO_Mux;
+  // Tri-state POCI when CS is high.  Allows for multiple Peripherals to talk.
+  assign o_SPI_POCI = i_SPI_CS_n ? 1'bZ : w_SPI_POCI_Mux;
 
-endmodule // SPI_Slave
+endmodule // SPI_Peripheral
