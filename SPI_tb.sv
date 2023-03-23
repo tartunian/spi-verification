@@ -6,6 +6,12 @@ package DataTypes;
 
 endpackage : DataTypes
 
+module SPI_driver();
+
+	
+
+endmodule
+
 module SPI_tb();
 
 	parameter SPI_MODE = 3;
