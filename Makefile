@@ -1,6 +1,12 @@
 # Makefile for SystemVerilog Lab1
-RTL= ./dut/Controller/SPI_Controller.v ./dut/Controller/SPI_Controller_With_Single_CS.v ./dut/Peripheral/SPI_Peripheral.v
-SVTB = ./SPI_tb.sv
+RTL= 	./dut/Controller/SPI_Controller.v \
+		./dut/Controller/SPI_Controller_With_Single_CS.v \
+		./dut/Peripheral/SPI_Peripheral.v \
+		./utils_pkg.sv \
+		./spi_io.sv \
+		./spi_driver.sv
+		
+SVTB = ./spi_tb.sv
 SEED = 1
 
 default: test 
@@ -11,7 +17,7 @@ run:
 	./simv -l simv.log +ntb_random_seed=$(SEED)
 
 compile:
-	vcs -l vcs.log -sverilog -debug_all -full64 $(SVTB) $(RTL)
+	vcs -l vcs.log -sverilog -debug_all -full64 $(RTL) $(SVTB)
 
 dve:
 	dve -vpd vcdplus.vpd &

@@ -1,0 +1,1 @@
+`define HALF_CLK_PRD	10
