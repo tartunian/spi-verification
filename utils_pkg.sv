@@ -1,4 +1,4 @@
-`define HALF_CLK_PRD	10
+`define HALF_CLK_PRD	2
 
 package utils_pkg;
 
@@ -6,6 +6,7 @@ package utils_pkg;
 
 		`define DEBUG(msg, lvl) \
 			utils_pkg::debug::debug($sformatf("%m ==> %s", msg), lvl);
+
 
 		static bit enable = 1;
 		static bit enable_output_file = 1;

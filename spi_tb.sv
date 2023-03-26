@@ -1,44 +1,19 @@
 
+
+
 module spi_tb
 	import utils_pkg::*;
 	();
 
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
-	parameter MAIN_CLK_DELAY = 2;
-	parameter MAX_BYTES_PER_CS = 2;
+	parameter MAX_BYTES_PER_CS = 1;
 	parameter CS_INACTIVE_CLKS = 10;
 
-	logic 		clk;
-
-	logic 		controller_rst_l;
-	logic 		peripheral_rst_l;
-
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_tx_Count;
-	logic [7:0] controller_tx_byte;
-	logic		controller_tx_dv;
-	logic		controller_tx_ready;
-
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
-	logic [7:0] controller_rx_byte;
-	logic		controller_rx_dv;
-
-	logic [7:0] peripheral_tx_byte;
-	logic		peripheral_tx_dv;
-
-	logic [7:0] peripheral_rx_byte;
-	logic		peripheral_rx_dv;
-
-
-	logic		spi_pico;
-	logic		spi_poci;
-	logic		spi_clk;
-
-	logic 		controller_spi_cs_n;
-	logic 		peripheral_spi_cs_n;
-
 	
-	spi_io spi_if();
+	spi_board_io #( 
+		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS)
+	) spi_board_if ();
 
 
 	SPI_Controller_With_Single_CS #(
@@ -47,54 +22,121 @@ module spi_tb
 		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS),
 		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
 	) spi_c(
-		.i_Rst_L(controller_rst_l),
-		.i_Clk(clk),
+		.i_Rst_L(spi_board_if.controller_rst_l),
+		.i_Clk(spi_board_if.clk),
 
-		.i_TX_Count(controller_tx_count),
-		.i_TX_Byte(controller_tx_byte),
-		.i_TX_DV(controller_tx_dv),
-		.o_TX_Ready(controller_tx_ready),
+		.i_TX_Count(spi_board_if.controller_tx_count),
+		.i_TX_Byte(spi_board_if.controller_tx_byte),
+		.i_TX_DV(spi_board_if.controller_tx_dv),
+		.o_TX_Ready(spi_board_if.controller_tx_ready),
 
-		.o_RX_Count(controller_rx_count),
-		.o_RX_DV(controller_rx_dv),
-		.o_RX_Byte(controller_rx_byte),
+		.o_RX_Count(spi_board_if.controller_rx_count),
+		.o_RX_DV(spi_board_if.controller_rx_dv),
+		.o_RX_Byte(spi_board_if.controller_rx_byte),
 
-		.o_SPI_Clk (spi_if.clk),
-		.i_SPI_POCI(spi_if.poci),
-		.o_SPI_PICO(spi_if.pico),
-		.o_SPI_CS_n(controller_spi_cs_n)
+		.o_SPI_Clk (spi_board_if.spi_if.clk),
+		.i_SPI_POCI(spi_board_if.spi_if.poci),
+		.o_SPI_PICO(spi_board_if.spi_if.pico),
+		.o_SPI_CS_n(spi_board_if.controller_spi_cs_n)
 	);
 
+	logic tmp_poci;
 
-	SPI_Peripheral spi_p(
-		.i_Rst_L(peripheral_rst_l),
-		.i_Clk(clk),
+
+	SPI_Peripheral #(
+		.SPI_MODE(SPI_MODE)
+	) spi_p(
+		.i_Rst_L(spi_board_if.peripheral_rst_l),
+		.i_Clk(spi_board_if.clk),
 		
-		.i_TX_DV(peripheral_tx_dv),
-		.i_TX_Byte(peripheral_tx_byte),
+		.i_TX_DV(spi_board_if.peripheral_tx_dv),
+		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
 
-		.o_RX_DV(peripheral_rx_dv),
-		.o_RX_Byte(peripheral_rx_byte),
+		.o_RX_DV(spi_board_if.peripheral_rx_dv),
+		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
 
-		.i_SPI_Clk(spi_if.clk),
-		.i_SPI_PICO(spi_if.pico),
-		.o_SPI_POCI(spi_if.poci),
-		.i_SPI_CS_n(peripheral_spi_cs_n)
+		.i_SPI_Clk(spi_board_if.spi_if.clk),
+		.i_SPI_PICO(spi_board_if.spi_if.pico),
+		.o_SPI_POCI(spi_board_if.spi_if.poci),
+		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
 
 	);
 	
 
-	spi_driver driver = new ( .spi_if(spi_if.tb) );
+	spi_driver driver = new ( .spi_board_if(spi_board_if) );
+
+
+	always #`HALF_CLK_PRD spi_board_if.clk = ~spi_board_if.clk;
+
+
+	task reset();
+
+		repeat(10) @(posedge spi_board_if.clk);
+		
+		spi_board_if.controller_rst_l  = 1'b0;
+		spi_board_if.peripheral_rst_l  = 1'b0;
+		repeat(10) @(posedge spi_board_if.clk);
+
+		spi_board_if.controller_rst_l  = 1'b1;
+		spi_board_if.peripheral_rst_l  = 1'b1;
+
+	endtask : reset
+
 
 	initial begin
-		clk = 0;
-	end
 
-	initial begin
-		$display("Starting spi_tb...");
-		driver.read();
-		driver.read();
-		driver.read();
+		$vcdpluson;
+        $dumpfile("spi_tb_dump.vcd");
+        $dumpvars;
+
+        // Reset the DUTs
+        reset();
+
+		// Enable the peripheral
+		spi_board_if.peripheral_spi_cs_n = 1'b0;
+
+		`DEBUG("Starting spi_tb...", 0);
+
+
+
+		for(int i=0; i<10; i+=1) begin
+			driver.controller_write(spi_board_if.controller_rx_byte+1);	
+			`DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
+			driver.peripheral_write(spi_board_if.peripheral_rx_byte+1);
+			`DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
+		end
+
+
+		// driver.controller_write(8'h01);	
+		// `DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
+		// driver.peripheral_write(8'h02);
+		// `DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
+
+		// driver.controller_write(8'h03);	
+		// `DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
+		// driver.peripheral_write(8'h04);
+		// `DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
+
+		// driver.peripheral_write(8'h05);
+		// `DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
+		// driver.controller_write(8'h06);	
+		// `DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
+
+
+		// @(posedge spi_board_if.peripheral_rx_dv);
+		
+
+		
+
+		// `DEBUG("Waiting for controller rx dv...", 0);
+		// @(posedge spi_board_if.controller_rx_dv);
+		
+
+		// Wait
+		repeat (100) @(posedge spi_board_if.clk);
+
+		$finish;
+
 	end
 
 
