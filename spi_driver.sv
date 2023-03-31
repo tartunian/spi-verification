@@ -30,12 +30,17 @@ class spi_driver;
 	task controller_write(logic [7:0] write_value);
 		@(posedge this.spi_board_if.clk);
 		setup_controller_write(write_value);
+		setup_peripheral_write(8'h00);
 		
+		`DEBUG($sformatf("put 0x%h", write_value), 0);
+
 		@(posedge this.spi_board_if.clk);
 		trigger_write();
 		
 		@(posedge this.spi_board_if.clk);
 		@(posedge this.spi_board_if.controller_tx_ready);
+
+		
 		
 	endtask : controller_write	
 
@@ -44,13 +49,16 @@ class spi_driver;
 		@(posedge this.spi_board_if.clk);
 		setup_controller_write(8'h00);
 		setup_peripheral_write(write_value);
+
+		`DEBUG($sformatf("put 0x%h", write_value), 0);
 		
 		@(posedge this.spi_board_if.clk);
 		trigger_write();
 		
 		@(posedge this.spi_board_if.clk);
-		@(posedge this.spi_board_if.controller_rx_dv);
 		@(posedge this.spi_board_if.controller_tx_ready);
+
+
 		
 	endtask : peripheral_write
 

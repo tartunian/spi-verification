@@ -29,9 +29,8 @@ interface spi_board_io
 	logic		controller_spi_cs_n;
 
 	logic 		peripheral_rst_l;
-	logic [7:0] peripheral_tx_byte;
 	logic 		peripheral_tx_dv;
-	logic 		peripheral_tx_ready;
+	logic [7:0] peripheral_tx_byte;	
 	logic 		peripheral_rx_dv;
 	logic [7:0] peripheral_rx_byte;
 	logic		peripheral_spi_cs_n;

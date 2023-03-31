@@ -82,6 +82,14 @@ module spi_tb
 
 	endtask : reset
 
+	always @(negedge spi_board_if.controller_rx_dv) begin
+		`DEBUG($sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte), 1);
+	end
+
+	always @(negedge spi_board_if.peripheral_rx_dv) begin
+		`DEBUG($sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte), 1);
+	end
+
 
 	initial begin
 
@@ -99,11 +107,11 @@ module spi_tb
 
 
 
-		for(int i=0; i<10; i+=1) begin
+		for(int i=0; i<4; i+=1) begin
 			driver.controller_write(spi_board_if.controller_rx_byte+1);	
-			`DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
+			// `DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
 			driver.peripheral_write(spi_board_if.peripheral_rx_byte+1);
-			`DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
+			// `DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
 		end
 
 
