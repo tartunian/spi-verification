@@ -1,12 +1,7 @@
 # Makefile for SystemVerilog Lab1
-RTL= 	./dut/Controller/SPI_Controller.v \
-		./dut/Controller/SPI_Controller_With_Single_CS.v \
-		./dut/Peripheral/SPI_Peripheral.v \
-		./utils_pkg.sv \
-		./spi_io.sv \
-		./spi_driver.sv
+RTL= 	
 		
-SVTB = ./spi_tb.sv
+SVTB = ./tb.sv
 SEED = 1
 
 default: test 
