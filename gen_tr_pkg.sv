@@ -23,6 +23,7 @@ package SPI_verification_trANDgen_pkg;
     rx_msgs = new(num_message);
 
     bit last_tr;
+    enum {controller_r, controller_w, peripheral_r, peripheral_w} tr_type_e;
 
     goldenRef = new(num_messages);
     // Do we want to explore defining the peripheral's response table? Don't know if that's written into 

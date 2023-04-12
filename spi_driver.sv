@@ -1,13 +1,16 @@
 import utils_pkg::*;
+import SPI_verification_trANDgen_pkg::*;
 
 class spi_driver;
 
+	mailbox #(Transaction) gen2drv;
 	virtual spi_board_io spi_board_if;
+	Transaction tr;
 
-	function new(virtual spi_board_io spi_board_if);
+	function new(virtual spi_board_io spi_board_if, mailbox #(Transaction) gen2drv);
 		this.spi_board_if = spi_board_if;
+		this.gen2drv = gen2drv;
 	endfunction : new
-
 
 	task setup_controller_write(logic [7:0] write_value);
 		this.spi_board_if.controller_tx_byte <= write_value;
@@ -61,5 +64,15 @@ class spi_driver;
 
 		
 	endtask : peripheral_write
+
+	task run();
+		
+		forever begin	
+			gen2drv.get(tr);
+			case(tr.tr_type_e)
+				controller_w:	controller_write(tr.tx_msgs);
+				peripheral_w:	peripheral_write(tr.tx_msgs);
+			endcase // tr.tr_type_e
+		end
 
 endclass : spi_driver

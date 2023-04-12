@@ -3,6 +3,7 @@
 
 module spi_tb
 	import utils_pkg::*;
+	import SPI_verification_trANDgen_pkg::*;
 	();
 
 	parameter SPI_MODE = 3;
