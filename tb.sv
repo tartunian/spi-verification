@@ -13,7 +13,7 @@ package utils_pkg;
 			WHITE = 37
 		} displayColor_e;
 
-		`define 		DEBUG(MSG) \
+		`define DEBUG(MSG) \
 			case ($sformatf("%m")) \
 				"$unit::\\environment::run ", \
 				"$unit::\\environment::wrap_up ": $write("%c[0;36m",27); \
@@ -76,24 +76,24 @@ interface spi_board_io
 	#(parameter MAX_BYTES_PER_CS=1)
 	();
 
-	logic 		clk;
+	logic       clk;
 
-	logic 		controller_rst_l;
+	logic       controller_rst_l;
 	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
 	logic [7:0] controller_tx_byte;
-	logic 		controller_tx_dv;
-	logic 		controller_tx_ready;
+	logic       controller_tx_dv;
+	logic       controller_tx_ready;
 	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
-	logic 		controller_rx_dv;
+	logic       controller_rx_dv;
 	logic [7:0] controller_rx_byte;
-	logic		controller_spi_cs_n;
+	logic       controller_spi_cs_n;
 
-	logic 		peripheral_rst_l;
-	logic 		peripheral_tx_dv;
-	logic [7:0] peripheral_tx_byte;	
-	logic 		peripheral_rx_dv;
+	logic       peripheral_rst_l;
+	logic       peripheral_tx_dv;
+	logic [7:0] peripheral_tx_byte; 
+	logic       peripheral_rx_dv;
 	logic [7:0] peripheral_rx_byte;
-	logic		peripheral_spi_cs_n;
+	logic       peripheral_spi_cs_n;
 
 	spi_io spi_if();
 
@@ -124,13 +124,13 @@ class spi_transaction;
 		PERIPHERAL_WRITE
 	} spiOperation_e;
 
-	static 	int 				total = 0;
+	static  int                 total = 0;
 
-			int 				id = 0;
-	rand 	logic [7:0] 		data;
-			logic [7:0] 		data_expected, data_actual;
-	rand 	spiOperation_e 		operation;
-			int 				error;
+			int                 id = 0;
+	rand    logic [7:0]         data;
+			logic [7:0]         data_expected, data_actual;
+	rand    spiOperation_e      operation;
+			int                 error;
 
 	function new();
 		this.id = total;
@@ -167,7 +167,7 @@ class spi_generator extends spi_transactor;
 	event driver_done, monitor_done;
 	int num_trs;
 
-	function new(	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon,
+	function new(   mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon,
 					event driver_done, monitor_done, int num_trs);
 		this.gen2drv = gen2drv;
 		this.gen2scb = gen2scb;
@@ -203,7 +203,7 @@ class spi_driver extends spi_transactor;
 	mailbox #(spi_transaction) gen2drv;
 	event driver_done;
 
-	function new(	virtual spi_board_io spi_board_if, 
+	function new(   virtual spi_board_io spi_board_if, 
 					mailbox #(spi_transaction) gen2drv,
 					event driver_done);
 		this.spi_board_if = spi_board_if;
@@ -258,7 +258,7 @@ class spi_driver extends spi_transactor;
 		@(posedge this.spi_board_if.clk);
 		`DEBUG($sformatf("Wrote %4d", write_value));
 		
-	endtask : controller_write	
+	endtask : controller_write  
 
 
 	task peripheral_write(logic [7:0] write_value);
@@ -304,7 +304,7 @@ class spi_scoreboard extends spi_transactor;
 	event driver_done;
 	int num_trs;
 
-	function new(	mailbox #(spi_transaction) gen2scb, scb2chk,
+	function new(   mailbox #(spi_transaction) gen2scb, scb2chk,
 					int num_trs);
 		this.gen2scb = gen2scb;
 		this.scb2chk = scb2chk;
@@ -337,7 +337,7 @@ class spi_monitor extends spi_transactor;
 	mailbox #(spi_transaction) gen2mon, mon2chk;
 	event driver_done, monitor_done;
 
-	function new(	virtual spi_board_io spi_board_if, 
+	function new(   virtual spi_board_io spi_board_if, 
 					mailbox #(spi_transaction) gen2mon, mon2chk,
 					event driver_done, monitor_done);
 		this.spi_board_if = spi_board_if;
@@ -523,7 +523,7 @@ program automatic testbench(spi_board_io spi_board_if);
 	initial begin
 
 		// Reset $display colors
-        $write("%c[0;37m",27);
+		$write("%c[0;37m",27);
 
 		`DEBUG("Starting testbench program...");
 
@@ -533,7 +533,7 @@ program automatic testbench(spi_board_io spi_board_if);
 		env.wrap_up();
 
 		// Reset $display colors
-        $write("%c[0;37m",27);
+		$write("%c[0;37m",27);
 
 	end
 
@@ -601,13 +601,13 @@ module tb_top();
 	initial begin
 
 		$vcdpluson;
-        $dumpfile("tb_dump.vcd");
-        $dumpvars;
+		$dumpfile("tb_dump.vcd");
+		$dumpvars;
 
-        `DEBUG("Starting tb_top...");
+		`DEBUG("Starting tb_top...");
 
-       	#10000;
-        
+		#10000;
+		
 		$finish;
 
 	end
