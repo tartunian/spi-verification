@@ -1,5 +1,5 @@
 # Makefile for SystemVerilog Lab1
-RTL= 	
+RTL= ./dut/*.v
 		
 SVTB = ./tb.sv
 SEED = 1

@@ -1,9 +1,9 @@
-package utils;
+package utils_pkg;
 
 	class debug;
 
-		`define 		DEBUG(MSG) debug::debug($sformatf("%s:: %s", $sformatf("%30s", $sformatf("%m")), MSG ));
-		`define  DEBUG_INDENT(MSG) debug::debug($sformatf("                                 %s", MSG ));
+		`define 		DEBUG(MSG) debug::debug($sformatf("%s:: %s", $sformatf("%40s", $sformatf("%m")), MSG ));
+		`define  DEBUG_INDENT(MSG) debug::debug($sformatf("                                           %s", MSG ));
 
 		static bit enable_output_file = 0;
 		static integer output_file;
@@ -27,72 +27,106 @@ package utils;
 
 	endclass
 
-endpackage : utils
+endpackage : utils_pkg
 
 
-package adder_types;
+interface spi_io
+	();
+	
+	logic clk;
+	logic poci;
+	logic pico;
+	logic cs;
 
-	typedef logic [7:0] adder_in_t;
-	typedef logic [8:0] adder_out_t;
+	modport tb (output clk, output cs, output poci, output pico);
+	modport peripheral (input clk, input cs, input pico, output poci);
+	modport controller (input clk, output cs, input poci, output pico);
 
-endpackage : adder_types
-
-
-module adder
-	import adder_types::*;
-	(input logic clk,
-	input adder_in_t a,
-	input adder_out_t b,
-	output adder_out_t c);
-
-	always @(posedge clk) c <= a-b;
-
-endmodule : adder
+endinterface : spi_io
 
 
-interface adder_io;
-	import adder_types::*;
+interface spi_board_io
+	#(parameter MAX_BYTES_PER_CS=1)
+	();
 
-	adder_in_t a, b;
-	adder_out_t c;
+	logic 		clk;
 
-	modport tb (output a, output b, input c);
+	logic 		controller_rst_l;
+	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
+	logic [7:0] controller_tx_byte;
+	logic 		controller_tx_dv;
+	logic 		controller_tx_ready;
+	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
+	logic 		controller_rx_dv;
+	logic [7:0] controller_rx_byte;
+	logic		controller_spi_cs_n;
 
-endinterface : adder_io
+	logic 		peripheral_rst_l;
+	logic 		peripheral_tx_dv;
+	logic [7:0] peripheral_tx_byte;	
+	logic 		peripheral_rx_dv;
+	logic [7:0] peripheral_rx_byte;
+	logic		peripheral_spi_cs_n;
+
+	spi_io spi_if();
+
+	initial begin
+
+		clk = 1'b0;
+
+		controller_rst_l = 1'b1;
+		controller_tx_count = 1;
+		controller_tx_byte = 1'b0;
+		controller_tx_dv = 1'b0;
+
+		peripheral_rst_l = 1'b1;
+		peripheral_tx_byte = 0;
+		peripheral_tx_dv = 1'b0;
+		peripheral_spi_cs_n = 1'b1;
+
+	end
+
+endinterface : spi_board_io
 
 
-class adder_transaction;
+class spi_transaction;
 
-	rand adder_types::adder_in_t a, b;
-	adder_types::adder_out_t c_expected, c_actual;
+	typedef enum {
+		CONTROLLER_WRITE,
+		PERIPHERAL_WRITE
+	} transactionType_e;
+
+	rand 	logic [7:0] 		data;
+			logic [7:0] 		data_expected, data_actual;
+	rand 	transactionType_e 	tr_type;
 
 	function new();
 	endfunction : new
 
 	function string to_string();
-		return $sformatf("a=%4d b=%4d c_expected=%4d c_actual=%4d", a, b, c_expected, c_actual);
+		return $sformatf("spi_transaction::tr_type=%p data=%4d data_expected=%4d data_actual=%4d", tr_type, data, data_expected, data_actual);
 	endfunction : to_string
 
-endclass : adder_transaction
+endclass : spi_transaction
 
 
-virtual class adder_transactor;
+virtual class spi_transactor;
 
-	adder_transaction tr;
+	spi_transaction tr;
 
 	pure virtual task run();
 
-endclass : adder_transactor
+endclass : spi_transactor
 
 
-class adder_generator extends adder_transactor;
-	import utils::*;
+class spi_generator extends spi_transactor;
+	import utils_pkg::*;
 
-	mailbox #(adder_transaction) gen2drv, gen2scb, gen2mon;
+	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon;
 	event driver_done;
 	int num_trs;
 
-	function new(	mailbox #(adder_transaction) gen2drv, gen2scb, gen2mon,
+	function new(	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon,
 					event driver_done, int num_trs);
 		this.gen2drv = gen2drv;
 		this.gen2scb = gen2scb;
@@ -116,29 +150,82 @@ class adder_generator extends adder_transactor;
 		end
 	endtask : run
 
-endclass : adder_generator
+endclass : spi_generator
 
 
-class adder_driver extends adder_transactor;
-	import utils::*;
+class spi_driver extends spi_transactor;
+	import utils_pkg::*;
 
-	virtual adder_io.tb adder_if;
-	mailbox #(adder_transaction) gen2drv;
+	virtual spi_board_io spi_board_if;
+	mailbox #(spi_transaction) gen2drv;
 	event driver_done;
 
-	function new(	virtual adder_io.tb adder_if, 
-					mailbox #(adder_transaction) gen2drv, event driver_done);
-		this.adder_if = adder_if;
+	function new(	virtual spi_board_io spi_board_if, 
+					mailbox #(spi_transaction) gen2drv, event driver_done);
+		this.spi_board_if = spi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_done = driver_done;
 	endfunction : new
 
-	task add(integer a, b);
-		`DEBUG($sformatf("Running with parameters a=%4d b=%4d", a, b));
-		adder_if.a <= a;
-		adder_if.b <= b;
-		#100;
+	task reset();
+		repeat(10) @(posedge spi_board_if.clk);
+		
+		spi_board_if.controller_rst_l  = 1'b0;
+		spi_board_if.peripheral_rst_l  = 1'b0;
+		repeat(10) @(posedge spi_board_if.clk);
+
+		spi_board_if.controller_rst_l  = 1'b1;
+		spi_board_if.peripheral_rst_l  = 1'b1;
+	endtask : reset
+
+	task setup_controller_write(logic [7:0] write_value);
+		this.spi_board_if.controller_tx_byte <= write_value;
+		this.spi_board_if.controller_tx_dv <= 1'b1;
 	endtask
+
+
+	task setup_peripheral_write(logic [7:0] write_value);
+		this.spi_board_if.peripheral_tx_byte <= write_value;
+		this.spi_board_if.peripheral_tx_dv <= 1'b1;
+	endtask
+
+
+	task trigger_write();
+		this.spi_board_if.controller_tx_dv <= 1'b0;
+		this.spi_board_if.peripheral_tx_dv <= 1'b0;
+	endtask
+
+
+	task controller_write(logic [7:0] write_value);
+		@(posedge this.spi_board_if.clk);
+		setup_controller_write(write_value);
+		setup_peripheral_write(8'h00);
+		
+		`DEBUG($sformatf("put %4d", write_value));
+
+		@(posedge this.spi_board_if.clk);
+		trigger_write();
+		
+		@(posedge this.spi_board_if.clk);
+		@(posedge this.spi_board_if.controller_tx_ready);		
+		
+	endtask : controller_write	
+
+
+	task peripheral_write(logic [7:0] write_value);
+		@(posedge this.spi_board_if.clk);
+		setup_controller_write(8'h00);
+		setup_peripheral_write(write_value);
+
+		`DEBUG($sformatf("put %4d", write_value));
+		
+		@(posedge this.spi_board_if.clk);
+		trigger_write();
+		
+		@(posedge this.spi_board_if.clk);
+		@(posedge this.spi_board_if.controller_tx_ready);
+		
+	endtask : peripheral_write
 
 	virtual task run();
 		forever begin
@@ -146,25 +233,31 @@ class adder_driver extends adder_transactor;
 			`DEBUG("Got transaction from gen2drv");
 			`DEBUG_INDENT(tr.to_string());
 
-			add(tr.a, tr.b);
+			case(tr.tr_type)
+				tr.CONTROLLER_WRITE: begin
+					controller_write(tr.data);
+				end
+				tr.PERIPHERAL_WRITE: begin
+					peripheral_write(tr.data);
+				end
+			endcase // tr.tr_type
 
 			->driver_done;
 			`DEBUG("driver done");
 		end
 	endtask: run
 
-endclass : adder_driver
+endclass : spi_driver
 
 
-class adder_scoreboard extends adder_transactor;
-	import utils::*;
+class spi_scoreboard extends spi_transactor;
+	import utils_pkg::*;
 
-	virtual adder_io.tb adder_if;
-	mailbox #(adder_transaction) gen2scb, scb2chk;
+	mailbox #(spi_transaction) gen2scb, scb2chk;
 	event driver_done;
 	int num_trs;
 
-	function new(	mailbox #(adder_transaction) gen2scb, scb2chk,
+	function new(	mailbox #(spi_transaction) gen2scb, scb2chk,
 					int num_trs);
 		this.gen2scb = gen2scb;
 		this.scb2chk = scb2chk;
@@ -178,7 +271,8 @@ class adder_scoreboard extends adder_transactor;
 			`DEBUG("Got transaction from gen2scb");
 			`DEBUG_INDENT(tr.to_string());
 
-			tr.c_expected = tr.a + tr.b;
+			// tr.c_expected = tr.a + tr.b;
+			`DEBUG("TBD - DO SCOREBOARD STUFF...");
 			scb2chk.put(tr);
 
 			`DEBUG("Put transaction to scb2chk");
@@ -187,19 +281,19 @@ class adder_scoreboard extends adder_transactor;
 		end
 	endtask: run
 
-endclass : adder_scoreboard
+endclass : spi_scoreboard
 
 
-class adder_monitor extends adder_transactor;
-	import utils::*;
+class spi_monitor extends spi_transactor;
+	import utils_pkg::*;
 
-	virtual adder_io.tb adder_if;
-	mailbox #(adder_transaction) gen2mon, mon2chk;
+	virtual spi_board_io spi_board_if;
+	mailbox #(spi_transaction) gen2mon, mon2chk;
 	event driver_done;
 
-	function new(	virtual adder_io.tb adder_if, 
-					mailbox #(adder_transaction) gen2mon, mon2chk, event driver_done);
-		this.adder_if = adder_if;
+	function new(	virtual spi_board_io spi_board_if, 
+					mailbox #(spi_transaction) gen2mon, mon2chk, event driver_done);
+		this.spi_board_if = spi_board_if;
 		this.gen2mon = gen2mon;
 		this.mon2chk = mon2chk;
 		this.driver_done = driver_done;
@@ -213,7 +307,15 @@ class adder_monitor extends adder_transactor;
 			`DEBUG("Got transaction from gen2mon");
 			`DEBUG_INDENT(tr.to_string());
 			
-			tr.c_actual = adder_if.c;
+			case(tr.tr_type)
+				tr.CONTROLLER_WRITE: begin
+					tr.data_actual = spi_board_if.controller_rx_byte;
+				end
+				tr.PERIPHERAL_WRITE: begin
+					tr.data_actual = spi_board_if.peripheral_rx_byte;
+				end
+			endcase // tr.tr_type
+			
 			mon2chk.put(tr);
 
 			`DEBUG("Put transaction to mon2chk");
@@ -221,18 +323,18 @@ class adder_monitor extends adder_transactor;
 		end
 	endtask : run
 
-endclass : adder_monitor
+endclass : spi_monitor
 
-class adder_checker extends adder_transactor;
-	import utils::*;
+class spi_checker extends spi_transactor;
+	import utils_pkg::*;
 
-	mailbox #(adder_transaction) scb2chk, mon2chk;
+	mailbox #(spi_transaction) scb2chk, mon2chk;
 	event checker_done;
-	adder_transaction scb_tr, mon_tr;
+	spi_transaction scb_tr, mon_tr;
 	int errors;
 	int error = 0;
 
-	function new(mailbox #(adder_transaction) scb2chk, mon2chk, event checker_done);
+	function new(mailbox #(spi_transaction) scb2chk, mon2chk, event checker_done);
 		this.scb2chk = scb2chk;
 		this.mon2chk = mon2chk;
 		this.checker_done = checker_done;
@@ -250,8 +352,9 @@ class adder_checker extends adder_transactor;
 			`DEBUG("Got transaction from mon2chk");
 			`DEBUG_INDENT(mon_tr.to_string());
 
-			error = scb_tr.c_expected!=mon_tr.c_actual;
-			`DEBUG($sformatf("Error Result: c_expected=%4d c_actual=%4d error=%d", scb_tr.c_expected, mon_tr.c_actual, error));
+			// error = scb_tr.c_expected!=mon_tr.c_actual;
+			`DEBUG("TBD - DO CHECKER STUFF...");
+			// `DEBUG($sformatf("Error Result: c_expected=%4d c_actual=%4d error=%d", scb_tr.c_expected, mon_tr.c_actual, error));
 
 			errors += error;
 
@@ -261,26 +364,26 @@ class adder_checker extends adder_transactor;
 	endtask : run
 
 
-endclass : adder_checker
+endclass : spi_checker
 
 
 class environment;
-	import utils::*;
+	import utils_pkg::*;
 
-	virtual adder_io adder_if;
+	virtual spi_board_io spi_board_if;
 	
-	adder_generator gen;
-	adder_scoreboard scb;
-	adder_driver drv;
-	adder_monitor mon;
-	adder_checker chk;
+	spi_generator gen;
+	spi_scoreboard scb;
+	spi_driver drv;
+	spi_monitor mon;
+	spi_checker chk;
 	
 	event driver_done, checker_done;
-	mailbox #(adder_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
+	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
 	int num_trs = 5;
 
-	function new(virtual adder_io adder_if);
-		this.adder_if = adder_if;
+	function new(virtual spi_board_io spi_board_if);
+		this.spi_board_if = spi_board_if;
 	endfunction : new
 
 	function build();
@@ -291,16 +394,18 @@ class environment;
 		mon2chk = new(num_trs);
 		gen = new(gen2drv, gen2scb, gen2mon, driver_done, num_trs);
 		scb = new(gen2scb, scb2chk, num_trs);
-		drv = new(adder_if, gen2drv, driver_done);
-		mon = new(adder_if, gen2mon, mon2chk, driver_done);
+		drv = new(spi_board_if, gen2drv, driver_done);
+		mon = new(spi_board_if, gen2mon, mon2chk, driver_done);
 		chk = new(scb2chk, mon2chk, checker_done);
 	endfunction : build
 
 	task run();
+		`DEBUG("Starting environment...");
 		fork
 			gen.run();
 			scb.run();
 			begin : driver_thread
+				drv.reset();
 				drv.run();
 			end
 			mon.run();
@@ -315,7 +420,9 @@ class environment;
 	endtask : run
 
 	task wrap_up();
-		adder_transaction tr;
+		spi_transaction tr;
+
+		`DEBUG("Wrapping up...");
 		`DEBUG("Cleaning mailboxes...");
 		`DEBUG($sformatf("gen2drv: %d transactions", gen2drv.num()));
 		`DEBUG($sformatf("gen2scb: %d transactions", gen2scb.num()));
@@ -345,15 +452,16 @@ class environment;
 endclass : environment
 
 
-program automatic testbench(adder_io adder_if);
+program automatic testbench(spi_board_io spi_board_if);
+	import utils_pkg::*;
 
 	environment env;
 
 	initial begin
 
-		$display("program testbench starting...");
+		`DEBUG("Starting testbench program...");
 
-		env = new(adder_if);
+		env = new(spi_board_if);
 		env.build();
 		env.run();
 		env.wrap_up();
@@ -364,14 +472,65 @@ endprogram : testbench
 
 
 module tb_top();
+	import utils_pkg::*;
 
-	logic			clk = 1'b0;
-	adder_io 		adder_if();
-	adder 			dut ( .clk(clk), .a(adder_if.a), .b(adder_if.b), .c(adder_if.c) );
+	parameter SPI_MODE = 3;
+	parameter CLKS_PER_HALF_BIT = 4;
+	parameter MAX_BYTES_PER_CS = 1;
+	parameter CS_INACTIVE_CLKS = 10;
 
-	testbench tb(adder_if);
+	spi_board_io #( 
+		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS)
+	) spi_board_if ();
 
-	always #10 clk <= ~clk;
+
+	SPI_Controller_With_Single_CS #(
+		.SPI_MODE(SPI_MODE),
+		.CLKS_PER_HALF_BIT(CLKS_PER_HALF_BIT),
+		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS),
+		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
+	) spi_c(
+		.i_Rst_L(spi_board_if.controller_rst_l),
+		.i_Clk(spi_board_if.clk),
+
+		.i_TX_Count(spi_board_if.controller_tx_count),
+		.i_TX_Byte(spi_board_if.controller_tx_byte),
+		.i_TX_DV(spi_board_if.controller_tx_dv),
+		.o_TX_Ready(spi_board_if.controller_tx_ready),
+
+		.o_RX_Count(spi_board_if.controller_rx_count),
+		.o_RX_DV(spi_board_if.controller_rx_dv),
+		.o_RX_Byte(spi_board_if.controller_rx_byte),
+
+		.o_SPI_Clk (spi_board_if.spi_if.clk),
+		.i_SPI_POCI(spi_board_if.spi_if.poci),
+		.o_SPI_PICO(spi_board_if.spi_if.pico),
+		.o_SPI_CS_n(spi_board_if.controller_spi_cs_n)
+	);
+
+
+	SPI_Peripheral #(
+		.SPI_MODE(SPI_MODE)
+	) spi_p(
+		.i_Rst_L(spi_board_if.peripheral_rst_l),
+		.i_Clk(spi_board_if.clk),
+		
+		.i_TX_DV(spi_board_if.peripheral_tx_dv),
+		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
+
+		.o_RX_DV(spi_board_if.peripheral_rx_dv),
+		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
+
+		.i_SPI_Clk(spi_board_if.spi_if.clk),
+		.i_SPI_PICO(spi_board_if.spi_if.pico),
+		.o_SPI_POCI(spi_board_if.spi_if.poci),
+		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
+
+	);
+
+	testbench tb(spi_board_if);
+
+	always #10 spi_board_if.clk <= ~spi_board_if.clk;
 
 	initial begin
 
@@ -379,9 +538,9 @@ module tb_top();
         $dumpfile("tb_dump.vcd");
         $dumpvars;
 
-        $display("Starting testbench...");
+        `DEBUG("Starting testbench...");
 
-        #1000;
+       	#10000;
         
 		$finish;
 
