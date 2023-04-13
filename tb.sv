@@ -2,8 +2,35 @@ package utils_pkg;
 
 	class debug;
 
-		`define 		DEBUG(MSG) debug::debug($sformatf("%s:: %s", $sformatf("%40s", $sformatf("%m")), MSG ));
-		`define  DEBUG_INDENT(MSG) debug::debug($sformatf("                                           %s", MSG ));
+		typedef enum {
+			BLACK = 30,
+			RED = 31,
+			GREEN = 32,
+			BROWN = 33,
+			BLUE = 34,
+			MAGENTA = 35,
+			CYAN = 36,
+			WHITE = 37
+		} displayColor_e;
+
+		`define 		DEBUG(MSG) \
+			case ($sformatf("%m")) \
+				"$unit::\\environment::run ", \
+				"$unit::\\environment::wrap_up ": $write("%c[0;36m",27); \
+				"$unit::\\spi_generator::run ": $write("%c[0;35m",27); \
+				"$unit::\\spi_driver::run ", \
+				"$unit::\\spi_driver::setup_peripheral_write ", \
+				"$unit::\\spi_driver::setup_controller_write ", \
+				"$unit::\\spi_driver::trigger_write ", \
+				"$unit::\\spi_driver::peripheral_write ", \
+				"$unit::\\spi_driver::controller_write ": $write("%c[0;32m",27); \
+				"$unit::\\spi_monitor::run ": $write("%c[0;31m",27); \
+				"$unit::\\spi_scoreboard::run ": $write("%c[0;33m",27); \
+				"$unit::\\spi_checker::run ": $write("%c[0;34m",27); \
+				default: $write("%c[0;37m",27); \
+			endcase \
+			debug::debug($sformatf("%s:: %s", $sformatf("%50s", $sformatf("%m")), MSG ));
+		`define  DEBUG_INDENT(MSG) debug::debug($sformatf("                                                     %s", MSG ));
 
 		static bit enable_output_file = 0;
 		static integer output_file;
@@ -38,9 +65,9 @@ interface spi_io
 	logic pico;
 	logic cs;
 
-	modport tb (output clk, output cs, output poci, output pico);
-	modport peripheral (input clk, input cs, input pico, output poci);
-	modport controller (input clk, output cs, input poci, output pico);
+	// modport tb (output clk, output cs, output poci, output pico);
+	// modport peripheral (input clk, input cs, input pico, output poci);
+	// modport controller (input clk, output cs, input poci, output pico);
 
 endinterface : spi_io
 
@@ -90,22 +117,36 @@ endinterface : spi_board_io
 
 
 class spi_transaction;
+	import utils_pkg::*;
 
 	typedef enum {
 		CONTROLLER_WRITE,
 		PERIPHERAL_WRITE
-	} transactionType_e;
+	} spiOperation_e;
 
+	static 	int 				total = 0;
+
+			int 				id = 0;
 	rand 	logic [7:0] 		data;
 			logic [7:0] 		data_expected, data_actual;
-	rand 	transactionType_e 	tr_type;
+	rand 	spiOperation_e 		operation;
+			int 				error;
 
 	function new();
+		this.id = total;
+		total++;
 	endfunction : new
 
-	function string to_string();
-		return $sformatf("spi_transaction::tr_type=%p data=%4d data_expected=%4d data_actual=%4d", tr_type, data, data_expected, data_actual);
-	endfunction : to_string
+	function string print();
+		$write("%c[0;37m",27);
+		`DEBUG_INDENT("=====spi_transaction=====");
+		`DEBUG_INDENT($sformatf("id            =%3d", id));
+		`DEBUG_INDENT($sformatf("operation     =%p", operation));
+		`DEBUG_INDENT($sformatf("data          =%4d", data));
+		`DEBUG_INDENT($sformatf("data_expected =%4d", data_expected));
+		`DEBUG_INDENT($sformatf("data_actual   =%4d", data_actual));
+		`DEBUG_INDENT($sformatf("error         =%s", error?"True":"False"));
+	endfunction
 
 endclass : spi_transaction
 
@@ -123,15 +164,16 @@ class spi_generator extends spi_transactor;
 	import utils_pkg::*;
 
 	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon;
-	event driver_done;
+	event driver_done, monitor_done;
 	int num_trs;
 
 	function new(	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon,
-					event driver_done, int num_trs);
+					event driver_done, monitor_done, int num_trs);
 		this.gen2drv = gen2drv;
 		this.gen2scb = gen2scb;
 		this.gen2mon = gen2mon;
 		this.driver_done = driver_done;
+		this.monitor_done = monitor_done;
 		this.num_trs = num_trs;
 	endfunction : new
 
@@ -144,9 +186,10 @@ class spi_generator extends spi_transactor;
 			gen2mon.put(tr);
 
 			`DEBUG("Put transaction to gen2drv, gen2scb, gen2mon");
-			`DEBUG_INDENT(tr.to_string());
+			tr.print();
 			
 			@ driver_done;
+			@ monitor_done;
 		end
 	endtask : run
 
@@ -161,7 +204,8 @@ class spi_driver extends spi_transactor;
 	event driver_done;
 
 	function new(	virtual spi_board_io spi_board_if, 
-					mailbox #(spi_transaction) gen2drv, event driver_done);
+					mailbox #(spi_transaction) gen2drv,
+					event driver_done);
 		this.spi_board_if = spi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_done = driver_done;
@@ -176,23 +220,30 @@ class spi_driver extends spi_transactor;
 
 		spi_board_if.controller_rst_l  = 1'b1;
 		spi_board_if.peripheral_rst_l  = 1'b1;
+
+		// Enable the peripheral
+		spi_board_if.peripheral_spi_cs_n = 1'b0;
+
 	endtask : reset
 
 	task setup_controller_write(logic [7:0] write_value);
 		this.spi_board_if.controller_tx_byte <= write_value;
 		this.spi_board_if.controller_tx_dv <= 1'b1;
+		`DEBUG($sformatf("Put %4d to controller_tx_byte", write_value));
 	endtask
 
 
 	task setup_peripheral_write(logic [7:0] write_value);
 		this.spi_board_if.peripheral_tx_byte <= write_value;
 		this.spi_board_if.peripheral_tx_dv <= 1'b1;
+		`DEBUG($sformatf("Put %4d to peripheral_tx_byte", write_value));
 	endtask
 
 
 	task trigger_write();
 		this.spi_board_if.controller_tx_dv <= 1'b0;
 		this.spi_board_if.peripheral_tx_dv <= 1'b0;
+		`DEBUG($sformatf("Write triggered"));
 	endtask
 
 
@@ -200,14 +251,12 @@ class spi_driver extends spi_transactor;
 		@(posedge this.spi_board_if.clk);
 		setup_controller_write(write_value);
 		setup_peripheral_write(8'h00);
-		
-		`DEBUG($sformatf("put %4d", write_value));
 
 		@(posedge this.spi_board_if.clk);
 		trigger_write();
 		
 		@(posedge this.spi_board_if.clk);
-		@(posedge this.spi_board_if.controller_tx_ready);		
+		`DEBUG($sformatf("Wrote %4d", write_value));
 		
 	endtask : controller_write	
 
@@ -216,14 +265,12 @@ class spi_driver extends spi_transactor;
 		@(posedge this.spi_board_if.clk);
 		setup_controller_write(8'h00);
 		setup_peripheral_write(write_value);
-
-		`DEBUG($sformatf("put %4d", write_value));
 		
 		@(posedge this.spi_board_if.clk);
 		trigger_write();
 		
 		@(posedge this.spi_board_if.clk);
-		@(posedge this.spi_board_if.controller_tx_ready);
+		`DEBUG($sformatf("Wrote %4d", write_value));
 		
 	endtask : peripheral_write
 
@@ -231,16 +278,16 @@ class spi_driver extends spi_transactor;
 		forever begin
 			gen2drv.get(tr);
 			`DEBUG("Got transaction from gen2drv");
-			`DEBUG_INDENT(tr.to_string());
+			tr.print();
 
-			case(tr.tr_type)
+			case(tr.operation)
 				tr.CONTROLLER_WRITE: begin
 					controller_write(tr.data);
 				end
 				tr.PERIPHERAL_WRITE: begin
 					peripheral_write(tr.data);
 				end
-			endcase // tr.tr_type
+			endcase // tr.operation
 
 			->driver_done;
 			`DEBUG("driver done");
@@ -269,14 +316,13 @@ class spi_scoreboard extends spi_transactor;
 			gen2scb.get(tr);
 
 			`DEBUG("Got transaction from gen2scb");
-			`DEBUG_INDENT(tr.to_string());
+			tr.print();
 
-			// tr.c_expected = tr.a + tr.b;
-			`DEBUG("TBD - DO SCOREBOARD STUFF...");
+			tr.data_expected = tr.data;
 			scb2chk.put(tr);
 
 			`DEBUG("Put transaction to scb2chk");
-			`DEBUG_INDENT(tr.to_string());
+			tr.print();
 
 		end
 	endtask: run
@@ -289,14 +335,16 @@ class spi_monitor extends spi_transactor;
 
 	virtual spi_board_io spi_board_if;
 	mailbox #(spi_transaction) gen2mon, mon2chk;
-	event driver_done;
+	event driver_done, monitor_done;
 
 	function new(	virtual spi_board_io spi_board_if, 
-					mailbox #(spi_transaction) gen2mon, mon2chk, event driver_done);
+					mailbox #(spi_transaction) gen2mon, mon2chk,
+					event driver_done, monitor_done);
 		this.spi_board_if = spi_board_if;
 		this.gen2mon = gen2mon;
 		this.mon2chk = mon2chk;
 		this.driver_done = driver_done;
+		this.monitor_done = monitor_done;
 	endfunction : new
 
 	task run();
@@ -305,21 +353,30 @@ class spi_monitor extends spi_transactor;
 			@ driver_done;
 			
 			`DEBUG("Got transaction from gen2mon");
-			`DEBUG_INDENT(tr.to_string());
+			tr.print();
 			
-			case(tr.tr_type)
+			case(tr.operation)
 				tr.CONTROLLER_WRITE: begin
-					tr.data_actual = spi_board_if.controller_rx_byte;
-				end
-				tr.PERIPHERAL_WRITE: begin
+					`DEBUG("Waiting on peripheral_rx_dv...");
+					@(negedge spi_board_if.peripheral_rx_dv);
+					`DEBUG("Collecting peripheral_rx_byte");
 					tr.data_actual = spi_board_if.peripheral_rx_byte;
 				end
-			endcase // tr.tr_type
+				tr.PERIPHERAL_WRITE: begin
+					`DEBUG("Waiting on controller_rx_dv...");
+					@(negedge spi_board_if.controller_rx_dv);
+					`DEBUG("Collecting controller_rx_byte");
+					tr.data_actual = spi_board_if.controller_rx_byte;
+				end
+			endcase // tr.operation
 			
 			mon2chk.put(tr);
 
 			`DEBUG("Put transaction to mon2chk");
-			`DEBUG_INDENT(tr.to_string());
+			tr.print();
+
+			->monitor_done;
+			`DEBUG("monitor done");
 		end
 	endtask : run
 
@@ -345,16 +402,17 @@ class spi_checker extends spi_transactor;
 			scb2chk.get(scb_tr);
 
 			`DEBUG("Got transaction from scb2chk");
-			`DEBUG_INDENT(scb_tr.to_string());
+			scb_tr.print();
 
 			mon2chk.get(mon_tr);
 			
 			`DEBUG("Got transaction from mon2chk");
-			`DEBUG_INDENT(mon_tr.to_string());
+			mon_tr.print();
 
-			// error = scb_tr.c_expected!=mon_tr.c_actual;
-			`DEBUG("TBD - DO CHECKER STUFF...");
-			// `DEBUG($sformatf("Error Result: c_expected=%4d c_actual=%4d error=%d", scb_tr.c_expected, mon_tr.c_actual, error));
+			error = scb_tr.data_expected != mon_tr.data_actual;
+
+			`DEBUG_INDENT("==========error==========");
+			`DEBUG_INDENT($sformatf("%s", error==1?"True":"False"));
 
 			errors += error;
 
@@ -378,7 +436,7 @@ class environment;
 	spi_monitor mon;
 	spi_checker chk;
 	
-	event driver_done, checker_done;
+	event driver_done, monitor_done, checker_done;
 	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
 	int num_trs = 5;
 
@@ -392,10 +450,10 @@ class environment;
 		gen2mon = new(num_trs);
 		scb2chk = new(num_trs);
 		mon2chk = new(num_trs);
-		gen = new(gen2drv, gen2scb, gen2mon, driver_done, num_trs);
+		gen = new(gen2drv, gen2scb, gen2mon, driver_done, monitor_done, num_trs);
 		scb = new(gen2scb, scb2chk, num_trs);
 		drv = new(spi_board_if, gen2drv, driver_done);
-		mon = new(spi_board_if, gen2mon, mon2chk, driver_done);
+		mon = new(spi_board_if, gen2mon, mon2chk, driver_done, monitor_done);
 		chk = new(scb2chk, mon2chk, checker_done);
 	endfunction : build
 
@@ -430,20 +488,25 @@ class environment;
 		`DEBUG($sformatf("scb2chk: %d transactions", scb2chk.num()));
 		`DEBUG($sformatf("mon2chk: %d transactions", mon2chk.num()));
 
-		while(gen2drv.try_get(tr))
+		while(gen2drv.try_get(tr)) begin
 			`DEBUG("Cleaned transaction from gen2drv");
+		end
 
-		while(gen2scb.try_get(tr))
+		while(gen2scb.try_get(tr)) begin
 			`DEBUG("Cleaned transaction from gen2scb");
+		end
 
-		while(gen2mon.try_get(tr))
+		while(gen2mon.try_get(tr)) begin
 			`DEBUG("Cleaned transaction from gen2mon");
+		end
 
-		while(scb2chk.try_get(tr))
+		while(scb2chk.try_get(tr)) begin
 			`DEBUG("Cleaned transaction from scb2chk");
+		end
 
-		while(mon2chk.try_get(tr))
+		while(mon2chk.try_get(tr)) begin
 			`DEBUG("Cleaned transaction from mon2chk");
+		end
 
 		`DEBUG($sformatf("TOTAL ERRORS: %3d/%3d (%5f%% )", chk.errors, num_trs, chk.errors/num_trs*100));
 
@@ -459,12 +522,18 @@ program automatic testbench(spi_board_io spi_board_if);
 
 	initial begin
 
+		// Reset $display colors
+        $write("%c[0;37m",27);
+
 		`DEBUG("Starting testbench program...");
 
 		env = new(spi_board_if);
 		env.build();
 		env.run();
 		env.wrap_up();
+
+		// Reset $display colors
+        $write("%c[0;37m",27);
 
 	end
 
@@ -482,7 +551,6 @@ module tb_top();
 	spi_board_io #( 
 		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS)
 	) spi_board_if ();
-
 
 	SPI_Controller_With_Single_CS #(
 		.SPI_MODE(SPI_MODE),
@@ -508,7 +576,6 @@ module tb_top();
 		.o_SPI_CS_n(spi_board_if.controller_spi_cs_n)
 	);
 
-
 	SPI_Peripheral #(
 		.SPI_MODE(SPI_MODE)
 	) spi_p(
@@ -525,7 +592,6 @@ module tb_top();
 		.i_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_POCI(spi_board_if.spi_if.poci),
 		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
-
 	);
 
 	testbench tb(spi_board_if);
@@ -538,7 +604,7 @@ module tb_top();
         $dumpfile("tb_dump.vcd");
         $dumpvars;
 
-        `DEBUG("Starting testbench...");
+        `DEBUG("Starting tb_top...");
 
        	#10000;
         
