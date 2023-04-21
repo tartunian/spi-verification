@@ -19,14 +19,9 @@ package utils_pkg;
 				"$unit::\\environment::wrap_up ": $write("%c[0;36m",27); \
 				"$unit::\\spi_generator::run ": $write("%c[0;35m",27); \
 				"$unit::\\spi_driver::run ", \
-				"$unit::\\spi_driver::setup_peripheral_write ", \
-				"$unit::\\spi_driver::setup_controller_write ", \
-				"$unit::\\spi_driver::peripheral_write_array ", \
-				"$unit::\\spi_driver::controller_write_array ", \
-				"$unit::\\spi_driver::trigger_write ", \
-				"$unit::\\spi_driver::peripheral_write ", \
-				"$unit::\\spi_driver::controller_write ": $write("%c[0;32m",27); \
-				"$unit::\\spi_monitor::run .collect_bytes", \
+				"$unit::\\spi_driver::write ", \
+				"$unit::\\spi_driver::write_array ", \
+				"$unit::\\spi_driver::trigger_write " : $write("%c[0;32m",27); \
 				"$unit::\\spi_monitor::run ": $write("%c[0;31m",27); \
 				"$unit::\\spi_scoreboard::run ": $write("%c[0;33m",27); \
 				"$unit::\\spi_checker::run ": $write("%c[0;34m",27); \
