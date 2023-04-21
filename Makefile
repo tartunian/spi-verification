@@ -2,7 +2,7 @@
 RTL= ./dut/*.v
 		
 SVTB = ./tb.sv
-SEED = 1
+SEED = 151
 
 default: test 
 
