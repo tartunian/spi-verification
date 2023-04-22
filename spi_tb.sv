@@ -1,6 +1,3 @@
-
-
-
 module spi_tb
 	import utils_pkg::*;
 	import SPI_verification_trANDgen_pkg::*;
@@ -10,6 +7,7 @@ module spi_tb
 	parameter CLKS_PER_HALF_BIT = 4;
 	parameter MAX_BYTES_PER_CS = 1;
 	parameter CS_INACTIVE_CLKS = 10;
+
 
 	
 	spi_board_io #( 
@@ -66,6 +64,12 @@ module spi_tb
 
 	spi_driver driver = new ( .spi_board_if(spi_board_if) );
 
+	mailbox #(Transaction) gen2scr;
+  mailbox #(Transaction) gen2drv;
+  
+  Generator spi_gen = new(gen2drv,gen2scr,2);
+
+     
 
 	always #`HALF_CLK_PRD spi_board_if.clk = ~spi_board_if.clk;
 
@@ -95,11 +99,11 @@ module spi_tb
 	initial begin
 
 		$vcdpluson;
-        $dumpfile("spi_tb_dump.vcd");
-        $dumpvars;
+    $dumpfile("spi_tb_dump.vcd");
+    $dumpvars;
 
-        // Reset the DUTs
-        reset();
+    // Reset the DUTs
+    reset();
 
 		// Enable the peripheral
 		spi_board_if.peripheral_spi_cs_n = 1'b0;

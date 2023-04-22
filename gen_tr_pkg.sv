@@ -35,7 +35,7 @@ package SPI_verification_trANDgen_pkg;
       mailbox #(Transaction) gen2drv;
       int numTrs;
 
-      function new // define the constructor to take mailboxes and the number of transactions desired as arguments
+      function new; // define the constructor to take mailboxes and the number of transactions desired as arguments
       ( mailbox #(Transaction) gen2scr,
         mailbox #(Transaction) gen2drv,
         int numTrs

@@ -12,6 +12,10 @@ class spi_driver;
 		this.gen2drv = gen2drv;
 	endfunction : new
 
+	task get_tr();
+		gen2drv.get(tr);
+	endtask
+
 	task setup_controller_write(logic [7:0] write_value);
 		this.spi_board_if.controller_tx_byte <= write_value;
 		this.spi_board_if.controller_tx_dv <= 1'b1;
@@ -30,10 +34,12 @@ class spi_driver;
 	endtask
 
 
-	task controller_write(logic [7:0] write_value);
-		@(posedge this.spi_board_if.clk);
-		setup_controller_write(write_value);
-		setup_peripheral_write(8'h00);
+	task controller_write();
+		foreach(i = this.tr.tx_msgs);
+			logic [7:0] write_value = this.tr.tx_msgs[i]
+			@(posedge this.spi_board_if.clk);
+			setup_controller_write(write_value);
+			setup_peripheral_write(8'h00);
 		
 		`DEBUG($sformatf("put 0x%h", write_value), 0);
 
