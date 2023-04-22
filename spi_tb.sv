@@ -1,7 +1,7 @@
-module spi_tb
-	import utils_pkg::*;
-	import SPI_verification_trANDgen_pkg::*;
-	();
+import utils_pkg::*;
+import SPI_verification_trANDgen_pkg::*;
+	
+module spi_tb();
 
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
@@ -62,13 +62,11 @@ module spi_tb
 	);
 	
 
-	spi_driver driver = new ( .spi_board_if(spi_board_if) );
-
-	mailbox #(Transaction) gen2scr;
-  mailbox #(Transaction) gen2drv;
-  
-  Generator spi_gen = new(gen2drv,gen2scr,2);
-
+	mailbox #(Transaction) gen2scr = new();
+  mailbox #(Transaction) gen2drv = new();
+  spi_driver driver;
+  Generator spi_gen;
+ 
      
 
 	always #`HALF_CLK_PRD spi_board_if.clk = ~spi_board_if.clk;
@@ -97,6 +95,9 @@ module spi_tb
 
 
 	initial begin
+		driver = new(spi_board_if, gen2drv);
+	 	spi_gen = new(gen2drv,gen2scr,2);
+
 
 		$vcdpluson;
     $dumpfile("spi_tb_dump.vcd");
@@ -104,20 +105,21 @@ module spi_tb
 
     // Reset the DUTs
     reset();
-
+  
 		// Enable the peripheral
 		spi_board_if.peripheral_spi_cs_n = 1'b0;
-
+		spi_gen.run();
 		`DEBUG("Starting spi_tb...", 0);
 
 
 
-		for(int i=0; i<4; i+=1) begin
-			driver.controller_write(spi_board_if.controller_rx_byte+1);	
-			// `DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
-			driver.peripheral_write(spi_board_if.peripheral_rx_byte+1);
-			// `DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
-		end
+		//for(int i=0; i<4; i+=1) begin
+			driver.get_tr();
+			driver.controller_write();	
+		//	`DEBUG( $sformatf("peripheral rx: 0x%h", spi_board_if.peripheral_rx_byte) , 0);
+			driver.peripheral_write();
+		//	 `DEBUG( $sformatf("controller rx: 0x%h", spi_board_if.controller_rx_byte) , 0);
+		//end
 
 
 		// driver.controller_write(8'h01);	

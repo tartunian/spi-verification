@@ -4,6 +4,7 @@ RTL= 	./dut/Controller/SPI_Controller.v \
 		./dut/Peripheral/SPI_Peripheral.v \
 		./utils_pkg.sv \
 		./spi_io.sv \
+		./gen_tr_pkg.sv \
 		./spi_driver.sv
 		
 SVTB = ./spi_tb.sv

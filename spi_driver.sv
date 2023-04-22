@@ -35,39 +35,41 @@ class spi_driver;
 
 
 	task controller_write();
-		foreach(i = this.tr.tx_msgs);
-			logic [7:0] write_value = this.tr.tx_msgs[i]
+		foreach(this.tr.tx_msgs[i]) begin
+			logic [7:0] write_value = this.tr.tx_msgs[i];
 			@(posedge this.spi_board_if.clk);
 			setup_controller_write(write_value);
 			setup_peripheral_write(8'h00);
 		
-		`DEBUG($sformatf("put 0x%h", write_value), 0);
+			`DEBUG($sformatf("put 0x%h", write_value), 0);
 
-		@(posedge this.spi_board_if.clk);
-		trigger_write();
+			@(posedge this.spi_board_if.clk);
+			trigger_write();
 		
-		@(posedge this.spi_board_if.clk);
-		@(posedge this.spi_board_if.controller_tx_ready);
+			@(posedge this.spi_board_if.clk);
+			@(posedge this.spi_board_if.controller_tx_ready);
 
-		
-		
+		end 
+
 	endtask : controller_write	
 
 
-	task peripheral_write(logic [7:0] write_value);
-		@(posedge this.spi_board_if.clk);
-		setup_controller_write(8'h00);
-		setup_peripheral_write(write_value);
+	task peripheral_write();
+		foreach(this.tr.tx_msgs[i]) begin
+			logic [7:0] write_value = this.tr.tx_msgs[i];
+			@(posedge this.spi_board_if.clk);
+			setup_controller_write(8'h00);
+			setup_peripheral_write(write_value);
 
-		`DEBUG($sformatf("put 0x%h", write_value), 0);
+			`DEBUG($sformatf("put 0x%h", write_value), 0);
 		
-		@(posedge this.spi_board_if.clk);
-		trigger_write();
+			@(posedge this.spi_board_if.clk);
+			trigger_write();
 		
-		@(posedge this.spi_board_if.clk);
-		@(posedge this.spi_board_if.controller_tx_ready);
+			@(posedge this.spi_board_if.clk);
+			@(posedge this.spi_board_if.controller_tx_ready);
 
-
+		end 
 		
 	endtask : peripheral_write
 
@@ -75,10 +77,11 @@ class spi_driver;
 		
 		forever begin	
 			gen2drv.get(tr);
-			case(tr.tr_type_e)
-				controller_w:	controller_write(tr.tx_msgs);
-				peripheral_w:	peripheral_write(tr.tx_msgs);
+			case(tr.msg_type)
+				0:	controller_write();
+				1:	peripheral_write();
 			endcase // tr.tr_type_e
 		end
+	endtask
 
 endclass : spi_driver
