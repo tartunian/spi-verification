@@ -59,10 +59,10 @@ package utils_pkg;
 endpackage : utils_pkg
 
 
-interface spi_io
+interface spi_io // is this used anywhere?
 	();
 	
-	logic clk;
+	logic clk; 
 	logic poci;
 	logic pico;
 	logic cs;
@@ -99,6 +99,25 @@ interface spi_board_io
 
 	spi_io spi_if();
 
+	clocking cb @(posedge clk);
+		default input #1 output #20;
+		output controller_tx_count;
+		output controller_tx_dv;
+		output controller_tx_byte;
+		output controller_rst_l; 
+		output peripheral_rst_l;
+		output peripheral_tx_dv;
+		output peripheral_tx_byte;
+		output peripheral_spi_cs_n;
+		input controller_spi_cs_n;  
+		input controller_tx_ready;
+		input controller_rx_dv;
+		input controller_rx_count;
+		input controller_rx_byte;
+		input peripheral_rx_dv;
+		input peripheral_rx_byte;
+	endclocking
+	
 	initial begin
 
 		clk = 1'b0;
@@ -222,14 +241,24 @@ class spi_generator extends spi_transactor;
 	endtask : run
 
 endclass : spi_generator
-
-
+	
+	covergroup data_array_cg with function sample(byte b);
+		coverpoint b;
+	endgroup : data_array_cg
+	
+/*	covergroup other_tr_cg();
+		coverpoint tr.operation;
+		coverpoint tr.data.size();
+	endgroup : other_tr_cg
+*/
 class spi_driver extends spi_transactor;
 	import utils_pkg::*;
 
 	virtual spi_board_io spi_board_if;
 	mailbox #(spi_transaction) gen2drv;
 	event driver_start, driver_done, monitor_step_done;
+	
+	data_array_cg dude;
 
 	int i = 0;
 
@@ -239,31 +268,32 @@ class spi_driver extends spi_transactor;
 		this.spi_board_if = spi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_start = driver_start;
-		this.driver_done = driver_done;
+		this.driver_done = driver_done;		
+		this.dude = new();
 	endfunction : new
 
 	task reset();
 		repeat(10) @(posedge spi_board_if.clk);
 		
-		spi_board_if.controller_rst_l  = 1'b0;
-		spi_board_if.peripheral_rst_l  = 1'b0;
+		spi_board_if.cb.controller_rst_l  <= 1'b0;
+		spi_board_if.cb.peripheral_rst_l  <= 1'b0;
 		repeat(10) @(posedge spi_board_if.clk);
 
-		spi_board_if.controller_rst_l  = 1'b1;
-		spi_board_if.peripheral_rst_l  = 1'b1;
+		spi_board_if.cb.controller_rst_l  <= 1'b1;
+		spi_board_if.cb.peripheral_rst_l  <= 1'b1;
 
 		// Enable the peripheral
-		spi_board_if.peripheral_spi_cs_n = 1'b0;
+		spi_board_if.cb.peripheral_spi_cs_n <= 1'b0;
 
 	endtask : reset
 
 
 	task trigger_write();
 		this.spi_board_if.controller_tx_dv <= 1'b1;
-		this.spi_board_if.peripheral_tx_dv <= 1'b1;
+		this.spi_board_if.cb.peripheral_tx_dv <= 1'b1;
 		@(posedge this.spi_board_if.clk);
 		this.spi_board_if.controller_tx_dv <= 1'b0;
-		this.spi_board_if.peripheral_tx_dv <= 1'b0;
+		this.spi_board_if.cb.peripheral_tx_dv <= 1'b0;
 	endtask
 
 
@@ -275,15 +305,14 @@ class spi_driver extends spi_transactor;
 			
 			CONTROLLER_WRITE : begin
 				this.spi_board_if.controller_tx_byte <= data;
-				this.spi_board_if.peripheral_tx_byte <= 8'h00;
+				this.spi_board_if.cb.peripheral_tx_byte <= 8'h00;
 			end
 			PERIPHERAL_WRITE : begin
 				this.spi_board_if.controller_tx_byte <= 8'h00;
-				this.spi_board_if.peripheral_tx_byte <= data;
+				this.spi_board_if.cb.peripheral_tx_byte <= data;
 			end
 
 		endcase // operation
-		
 		trigger_write();
 
 		`DEBUG("Waiting on controller_tx_ready...");
@@ -311,7 +340,6 @@ class spi_driver extends spi_transactor;
 
 	task run();
 		forever begin
-
 			`DEBUG("Waiting for next transaction...");
 			gen2drv.get(tr);
 			`DEBUG("Got transaction from gen2drv");
@@ -320,6 +348,8 @@ class spi_driver extends spi_transactor;
 			->driver_start;
 			`DEBUG("(event) driver_start");
 
+			foreach(tr.data[i]) dude.sample(tr.data[i]);
+			$display("coverage: %0f",dude.get_inst_coverage());
 			write_array(tr.operation, tr.data);
 
 			->driver_done;
@@ -402,10 +432,10 @@ class spi_monitor extends spi_transactor;
 					for(i=0; i<tr.data.size(); i+=1) begin
 
 						`DEBUG($sformatf("Waiting on peripheral_rx_dv (byte %3d)...", i));
-						@(negedge spi_board_if.peripheral_rx_dv);
+						@(negedge spi_board_if.cb.peripheral_rx_dv);
 						
 						`DEBUG($sformatf("Collecting peripheral_rx_byte (byte %3d)...", i));
-						tr.data_actual[i] = spi_board_if.peripheral_rx_byte;
+						tr.data_actual[i] = spi_board_if.cb.peripheral_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
 					end
 					
@@ -416,10 +446,10 @@ class spi_monitor extends spi_transactor;
 					for(i=0; i<tr.data.size(); i+=1) begin
 
 						`DEBUG($sformatf("Waiting on controller_rx_dv (byte %3d)...", i));
-						@(negedge spi_board_if.controller_rx_dv);
+						@(negedge spi_board_if.cb.controller_rx_dv);
 						
 						`DEBUG($sformatf("Collecting controller_rx_byte (byte %3d)...", i));
-						tr.data_actual[i] = spi_board_if.controller_rx_byte;
+						tr.data_actual[i] = spi_board_if.cb.controller_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
 					end
 
@@ -592,6 +622,8 @@ class environment;
 
 		`DEBUG($sformatf("TOTAL ERRORS: %3d/%3d (%5f%% )", chk.errors, num_trs, (chk.errors/num_trs)*100));
 
+	//	this.drv.data_array_cg
+
 	endtask : wrap_up
 
 endclass : environment
@@ -603,7 +635,6 @@ program automatic testbench(spi_board_io spi_board_if);
 	environment env;
 
 	initial begin
-
 		$vcdpluson;
 		$dumpfile("tb_dump.vcd");
 		$dumpvars;
@@ -612,12 +643,11 @@ program automatic testbench(spi_board_io spi_board_if);
 		$write("%c[0;37m",27);
 
 		`DEBUG("Starting testbench...");
-
 		env = new(spi_board_if);
 		env.build();
 		env.run();
 		env.wrap_up();
-
+		//
 		// Reset $display colors
 		$write("%c[0;37m",27);
 		
