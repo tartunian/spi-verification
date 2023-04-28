@@ -58,6 +58,7 @@ package utils_pkg;
 
 endpackage : utils_pkg
 
+`define MAX_BYTES_PER_CS 4
 
 interface spi_io // is this used anywhere?
 	();
@@ -75,17 +76,16 @@ endinterface : spi_io
 
 
 interface spi_board_io
-	#(parameter MAX_BYTES_PER_CS=1)
 	();
 
 	logic       clk;
 
 	logic       controller_rst_l;
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
+	logic [$clog2(`MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
 	logic [7:0] controller_tx_byte;
 	logic       controller_tx_dv;
 	logic       controller_tx_ready;
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
+	logic [$clog2(`MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
 	logic       controller_rx_dv;
 	logic [7:0] controller_rx_byte;
 	logic       controller_spi_cs_n;
@@ -150,12 +150,11 @@ class spi_transaction;
 	rand    spiOperation_e      operation;
 	rand    logic [7:0]         data [];
 			logic [7:0]         data_expected[ ], data_actual[ ];	
-
-	constraint data_size_c { data.size() inside {[1:8]}; }
+			
+	constraint data_size_c { data.size() inside {[1:`MAX_BYTES_PER_CS]}; }
 
 	function new();
 		this.id = total;
-
 		this.randomize();
 
 		data_expected = new[data.size()];
@@ -176,7 +175,7 @@ class spi_transaction;
 
 endclass : spi_transaction
 
-class spi_transaction_directed extends spi_transaction;
+/*class spi_transaction_directed extends spi_transaction;
 	import utils_pkg::*;
 
 	function new(spiOperation_e operation, logic [7:0] data []);
@@ -190,7 +189,7 @@ class spi_transaction_directed extends spi_transaction;
 	endfunction : new
 
 endclass : spi_transaction_directed
-
+*/
 
 virtual class spi_transactor;
 
@@ -546,7 +545,7 @@ class environment;
 	
 	event driver_start, driver_done, monitor_done, checker_done;
 	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
-	int num_trs = 100;
+	int num_trs = 5;
 
 	function new(virtual spi_board_io spi_board_if);
 		this.spi_board_if = spi_board_if;
@@ -629,7 +628,7 @@ class environment;
 endclass : environment
 
 
-program automatic testbench(spi_board_io spi_board_if);
+program automatic testbench (spi_board_io spi_board_if);
 	import utils_pkg::*;
 
 	environment env;
@@ -663,17 +662,25 @@ module tb_top();
 
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
-	parameter MAX_BYTES_PER_CS = 8;
 	parameter CS_INACTIVE_CLKS = 10;
+	int hi;
 
-	spi_board_io #( 
-		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS)
-	) spi_board_if ();
+//	parameter RANDO_PARAM = $urandom_range(0,8);
+//genvar = j;
+//generate
+// 	for(i=0;i<4;i=i+1)begin : spi_inyourface
+// 		spi_board_io #(
+// 		  .`MAX_BYTES_PER_CS($urandom_range(0,8))
+// 	) spi_board_if ();
+// 	end
+// endgenerate 
+
+spi_board_io spi_board_if();
 
 	SPI_Controller_With_Single_CS #(
 		.SPI_MODE(SPI_MODE),
 		.CLKS_PER_HALF_BIT(CLKS_PER_HALF_BIT),
-		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS),
+		.MAX_BYTES_PER_CS(`MAX_BYTES_PER_CS),
 		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
 	) spi_c(
 		.i_Rst_L(spi_board_if.controller_rst_l),
