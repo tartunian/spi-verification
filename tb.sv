@@ -58,6 +58,7 @@ package utils_pkg;
 
 endpackage : utils_pkg
 
+`define MAX_BYTES_PER_CS 4
 
 interface spi_io // is this used anywhere?
 	();
@@ -75,17 +76,16 @@ endinterface : spi_io
 
 
 interface spi_board_io
-	#(parameter MAX_BYTES_PER_CS=1)
 	();
 
 	logic       clk;
 
 	logic       controller_rst_l;
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
+	logic [$clog2(`MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
 	logic [7:0] controller_tx_byte;
 	logic       controller_tx_dv;
 	logic       controller_tx_ready;
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
+	logic [$clog2(`MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
 	logic       controller_rx_dv;
 	logic [7:0] controller_rx_byte;
 	logic       controller_spi_cs_n;
@@ -149,12 +149,11 @@ class spi_transaction;
 	rand    spiOperation_e      operation;
 	rand    logic [7:0]         data [];
 			logic [7:0]         data_expected[ ], data_actual[ ];	
-
-	constraint data_size_c { data.size() inside {[1:8]}; }
+			
+	constraint data_size_c { data.size() inside {[1:`MAX_BYTES_PER_CS]}; }
 
 	function new();
 		this.id = total;
-
 		this.randomize();
 
 		data_expected = new[data.size()];
@@ -175,7 +174,7 @@ class spi_transaction;
 
 endclass : spi_transaction
 
-class spi_transaction_directed extends spi_transaction;
+/*class spi_transaction_directed extends spi_transaction;
 	import utils_pkg::*;
 
 	function new(spiOperation_e operation, logic [7:0] data []);
@@ -189,7 +188,7 @@ class spi_transaction_directed extends spi_transaction;
 	endfunction : new
 
 endclass : spi_transaction_directed
-
+*/
 
 virtual class spi_transactor;
 
@@ -240,14 +239,24 @@ class spi_generator extends spi_transactor;
 	endtask : run
 
 endclass : spi_generator
-
-
+	
+	covergroup data_array_cg with function sample(byte b);
+		coverpoint b;
+	endgroup : data_array_cg
+	
+/*	covergroup other_tr_cg();
+		coverpoint tr.operation;
+		coverpoint tr.data.size();
+	endgroup : other_tr_cg
+*/
 class spi_driver extends spi_transactor;
 	import utils_pkg::*;
 
 	virtual spi_board_io spi_board_if;
 	mailbox #(spi_transaction) gen2drv;
 	event driver_start, driver_done, monitor_step_done;
+	
+	data_array_cg dude;
 
 	int i = 0;
 
@@ -257,30 +266,31 @@ class spi_driver extends spi_transactor;
 		this.spi_board_if = spi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_start = driver_start;
-		this.driver_done = driver_done;
+		this.driver_done = driver_done;		
+		this.dude = new();
 	endfunction : new
 
 	task reset();
 		repeat(10) @(posedge spi_board_if.cb);
 		
-		spi_board_if.cb.controller_rst_l  = 1'b0;
-		spi_board_if.cb.peripheral_rst_l  = 1'b0;
-		repeat(10) @(posedge spi_board_if..cb);
+		spi_board_if.cb.controller_rst_l  <= 1'b0;
+		spi_board_if.cb.peripheral_rst_l  <= 1'b0;
+		repeat(10) @(posedge spi_board_if.clk);
 
-		spi_board_if.cb.controller_rst_l  = 1'b1;
-		spi_board_if.cb.peripheral_rst_l  = 1'b1;
+		spi_board_if.cb.controller_rst_l  <= 1'b1;
+		spi_board_if.cb.peripheral_rst_l  <= 1'b1;
 
 		// Enable the peripheral
-		spi_board_if.cb.peripheral_spi_cs_n = 1'b0;
+		spi_board_if.cb.peripheral_spi_cs_n <= 1'b0;
 
 	endtask : reset
 
 
 	task trigger_write();
-		this.spi_board_if.cb.controller_tx_dv <= 1'b1;
+		this.spi_board_if.controller_tx_dv <= 1'b1;
 		this.spi_board_if.cb.peripheral_tx_dv <= 1'b1;
-		@(posedge this.spi_board_if.cb);
-		this.spi_board_if.cb.controller_tx_dv <= 1'b0;
+		@(posedge this.spi_board_if.clk);
+		this.spi_board_if.controller_tx_dv <= 1'b0;
 		this.spi_board_if.cb.peripheral_tx_dv <= 1'b0;
 	endtask
 
@@ -292,16 +302,15 @@ class spi_driver extends spi_transactor;
 		case(operation)
 			
 			CONTROLLER_WRITE : begin
-				this.spi_board_if.cb.controller_tx_byte <= data;
+				this.spi_board_if.controller_tx_byte <= data;
 				this.spi_board_if.cb.peripheral_tx_byte <= 8'h00;
 			end
 			PERIPHERAL_WRITE : begin
-				this.spi_board_if.cb.controller_tx_byte <= 8'h00;
+				this.spi_board_if.controller_tx_byte <= 8'h00;
 				this.spi_board_if.cb.peripheral_tx_byte <= data;
 			end
 
 		endcase // operation
-		
 		trigger_write();
 
 		`DEBUG("Waiting on controller_tx_ready...");
@@ -329,7 +338,6 @@ class spi_driver extends spi_transactor;
 
 	task run();
 		forever begin
-
 			`DEBUG("Waiting for next transaction...");
 			gen2drv.get(tr);
 			`DEBUG("Got transaction from gen2drv");
@@ -338,6 +346,8 @@ class spi_driver extends spi_transactor;
 			->driver_start;
 			`DEBUG("(event) driver_start");
 
+			foreach(tr.data[i]) dude.sample(tr.data[i]);
+			$display("coverage: %0f",dude.get_inst_coverage());
 			write_array(tr.operation, tr.data);
 
 			->driver_done;
@@ -535,7 +545,7 @@ class environment;
 	
 	event driver_start, driver_done, monitor_done, checker_done;
 	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
-	int num_trs = 100;
+	int num_trs = 5;
 
 	function new(virtual spi_board_io spi_board_if);
 		this.spi_board_if = spi_board_if;
@@ -611,6 +621,8 @@ class environment;
 
 		`DEBUG($sformatf("TOTAL ERRORS: %3d/%3d (%5f%% )", chk.errors, num_trs, (chk.errors/num_trs)*100));
 
+	//	this.drv.data_array_cg
+
 	endtask : wrap_up
 
 endclass : environment
@@ -629,13 +641,12 @@ endclass
 
 
 
-program automatic testbench(spi_board_io spi_board_if);
+program automatic testbench (spi_board_io spi_board_if);
 	import utils_pkg::*;
 
 	environment env;
 
 	initial begin
-
 		$vcdpluson;
 		$dumpfile("tb_dump.vcd");
 		$dumpvars;
@@ -644,12 +655,11 @@ program automatic testbench(spi_board_io spi_board_if);
 		$write("%c[0;37m",27);
 
 		`DEBUG("Starting testbench...");
-
 		env = new(spi_board_if);
 		env.build();
 		env.run();
 		env.wrap_up();
-
+		//
 		// Reset $display colors
 		$write("%c[0;37m",27);
 		
@@ -665,17 +675,25 @@ module tb_top();
 
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
-	parameter MAX_BYTES_PER_CS = 8;
 	parameter CS_INACTIVE_CLKS = 10;
+	int hi;
 
-	spi_board_io #( 
-		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS)
-	) spi_board_if ();
+//	parameter RANDO_PARAM = $urandom_range(0,8);
+//genvar = j;
+//generate
+// 	for(i=0;i<4;i=i+1)begin : spi_inyourface
+// 		spi_board_io #(
+// 		  .`MAX_BYTES_PER_CS($urandom_range(0,8))
+// 	) spi_board_if ();
+// 	end
+// endgenerate 
+
+spi_board_io spi_board_if();
 
 	SPI_Controller_With_Single_CS #(
 		.SPI_MODE(SPI_MODE),
 		.CLKS_PER_HALF_BIT(CLKS_PER_HALF_BIT),
-		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS),
+		.MAX_BYTES_PER_CS(`MAX_BYTES_PER_CS),
 		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
 	) spi_c(
 		.i_Rst_L(spi_board_if.cb.controller_rst_l),
