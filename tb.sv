@@ -59,10 +59,10 @@ package utils_pkg;
 endpackage : utils_pkg
 
 
-interface spi_io
+interface spi_io // is this used anywhere?
 	();
 	
-	logic clk;
+	logic clk; 
 	logic poci;
 	logic pico;
 	logic cs;
@@ -98,7 +98,25 @@ interface spi_board_io
 	logic       peripheral_spi_cs_n;
 
 	spi_io spi_if();
-
+	clocking cb @(posedge clk);
+		default input #1 output #2;
+		output controller_tx_count;
+		output controller_tx_dv;
+		output controller_tx_byte;
+		output controller_rst_l, 
+		output peripheral_rst_l,
+		output peripheral_tx_dv;
+		output peripheral_tx_byte;
+		output peripheral_spi_cs_n;
+		input controller_spi_cs_n;  
+		input controller_tx_ready;
+		input controller_rx_dv;
+		input controller_rx_count;
+		input controller_rx_byte;
+		input peripheral_rx_dv;
+		input peripheral_rx_byte;
+	endclocking
+	
 	initial begin
 
 		clk = 1'b0;
@@ -243,27 +261,27 @@ class spi_driver extends spi_transactor;
 	endfunction : new
 
 	task reset();
-		repeat(10) @(posedge spi_board_if.clk);
+		repeat(10) @(posedge spi_board_if.cb);
 		
-		spi_board_if.controller_rst_l  = 1'b0;
-		spi_board_if.peripheral_rst_l  = 1'b0;
-		repeat(10) @(posedge spi_board_if.clk);
+		spi_board_if.cb.controller_rst_l  = 1'b0;
+		spi_board_if.cb.peripheral_rst_l  = 1'b0;
+		repeat(10) @(posedge spi_board_if..cb);
 
-		spi_board_if.controller_rst_l  = 1'b1;
-		spi_board_if.peripheral_rst_l  = 1'b1;
+		spi_board_if.cb.controller_rst_l  = 1'b1;
+		spi_board_if.cb.peripheral_rst_l  = 1'b1;
 
 		// Enable the peripheral
-		spi_board_if.peripheral_spi_cs_n = 1'b0;
+		spi_board_if.cb.peripheral_spi_cs_n = 1'b0;
 
 	endtask : reset
 
 
 	task trigger_write();
-		this.spi_board_if.controller_tx_dv <= 1'b1;
-		this.spi_board_if.peripheral_tx_dv <= 1'b1;
-		@(posedge this.spi_board_if.clk);
-		this.spi_board_if.controller_tx_dv <= 1'b0;
-		this.spi_board_if.peripheral_tx_dv <= 1'b0;
+		this.spi_board_if.cb.controller_tx_dv <= 1'b1;
+		this.spi_board_if.cb.peripheral_tx_dv <= 1'b1;
+		@(posedge this.spi_board_if.cb);
+		this.spi_board_if.cb.controller_tx_dv <= 1'b0;
+		this.spi_board_if.cb.peripheral_tx_dv <= 1'b0;
 	endtask
 
 
@@ -274,12 +292,12 @@ class spi_driver extends spi_transactor;
 		case(operation)
 			
 			CONTROLLER_WRITE : begin
-				this.spi_board_if.controller_tx_byte <= data;
-				this.spi_board_if.peripheral_tx_byte <= 8'h00;
+				this.spi_board_if.cb.controller_tx_byte <= data;
+				this.spi_board_if.cb.peripheral_tx_byte <= 8'h00;
 			end
 			PERIPHERAL_WRITE : begin
-				this.spi_board_if.controller_tx_byte <= 8'h00;
-				this.spi_board_if.peripheral_tx_byte <= data;
+				this.spi_board_if.cb.controller_tx_byte <= 8'h00;
+				this.spi_board_if.cb.peripheral_tx_byte <= data;
 			end
 
 		endcase // operation
@@ -287,16 +305,16 @@ class spi_driver extends spi_transactor;
 		trigger_write();
 
 		`DEBUG("Waiting on controller_tx_ready...");
-		@(posedge this.spi_board_if.controller_tx_ready);
-		@(posedge this.spi_board_if.clk);
+		@(posedge this.spi_board_if.cb.controller_tx_ready);
+		@(posedge this.spi_board_if.cb);
 
 	endtask
 
 
 	task write_array(spiOperation_e operation, logic [7:0] data []);
 		
-		@(posedge this.spi_board_if.clk);
-		this.spi_board_if.controller_tx_count <= data.size();
+		@(posedge this.spi_board_if.cb);
+		this.spi_board_if.cb.controller_tx_count <= data.size();
 
 		`DEBUG($sformatf("Writing %3d bytes...", data.size()));
 
@@ -304,7 +322,7 @@ class spi_driver extends spi_transactor;
 			write(operation, data[i]);			
 		end
 		
-		@(posedge this.spi_board_if.clk);
+		@(posedge this.spi_board_if.cb);
 		`DEBUG($sformatf("Wrote %3d bytes", data.size()));
 	endtask
 
@@ -369,7 +387,7 @@ class spi_monitor extends spi_transactor;
 	virtual spi_board_io spi_board_if;
 	mailbox #(spi_transaction) gen2mon, mon2chk;
 	event driver_start, driver_done, monitor_done;
-
+	coverage cover1;
 	int i = 0;
 
 	function new(   virtual spi_board_io spi_board_if, 
@@ -391,6 +409,7 @@ class spi_monitor extends spi_transactor;
 			
 			`DEBUG("Got transaction from gen2mon");
 			tr.print();
+			cover1.tr = this.tr
 
 			`DEBUG($sformatf("Waiting for driver_start..."));
 			wait(driver_start.triggered);
@@ -402,10 +421,10 @@ class spi_monitor extends spi_transactor;
 					for(i=0; i<tr.data.size(); i+=1) begin
 
 						`DEBUG($sformatf("Waiting on peripheral_rx_dv (byte %3d)...", i));
-						@(negedge spi_board_if.peripheral_rx_dv);
+						@(negedge spi_board_if.cb.peripheral_rx_dv);
 						
 						`DEBUG($sformatf("Collecting peripheral_rx_byte (byte %3d)...", i));
-						tr.data_actual[i] = spi_board_if.peripheral_rx_byte;
+						tr.data_actual[i] = spi_board_if.cb.peripheral_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
 					end
 					
@@ -416,10 +435,10 @@ class spi_monitor extends spi_transactor;
 					for(i=0; i<tr.data.size(); i+=1) begin
 
 						`DEBUG($sformatf("Waiting on controller_rx_dv (byte %3d)...", i));
-						@(negedge spi_board_if.controller_rx_dv);
+						@(negedge spi_board_if.cb.controller_rx_dv);
 						
 						`DEBUG($sformatf("Collecting controller_rx_byte (byte %3d)...", i));
-						tr.data_actual[i] = spi_board_if.controller_rx_byte;
+						tr.data_actual[i] = spi_board_if.cb.controller_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
 					end
 
@@ -596,6 +615,19 @@ class environment;
 
 endclass : environment
 
+class coverage;
+	spi_transaction tr;
+	covergroup cg;
+		coverpoint tr.operation;
+		coverpoint tr.data;
+	endgroup : cg
+	function new(spi_transaction tr);
+		this.tr = tr;
+	endfunction
+endclass
+
+
+
 
 program automatic testbench(spi_board_io spi_board_if);
 	import utils_pkg::*;
@@ -646,19 +678,19 @@ module tb_top();
 		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS),
 		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
 	) spi_c(
-		.i_Rst_L(spi_board_if.controller_rst_l),
-		.i_Clk(spi_board_if.clk),
+		.i_Rst_L(spi_board_if.cb.controller_rst_l),
+		.i_Clk(spi_board_if.cb),
 
-		.i_TX_Count(spi_board_if.controller_tx_count),
-		.i_TX_Byte(spi_board_if.controller_tx_byte),
-		.i_TX_DV(spi_board_if.controller_tx_dv),
-		.o_TX_Ready(spi_board_if.controller_tx_ready),
+		.i_TX_Count(spi_board_if.cb.controller_tx_count),
+		.i_TX_Byte(spi_board_if.cb.controller_tx_byte),
+		.i_TX_DV(spi_board_if.cb.controller_tx_dv),
+		.o_TX_Ready(spi_board_if.cb.controller_tx_ready),
 
-		.o_RX_Count(spi_board_if.controller_rx_count),
-		.o_RX_DV(spi_board_if.controller_rx_dv),
-		.o_RX_Byte(spi_board_if.controller_rx_byte),
+		.o_RX_Count(spi_board_if.cb.controller_rx_count),
+		.o_RX_DV(spi_board_if.cb.controller_rx_dv),
+		.o_RX_Byte(spi_board_if.cb.controller_rx_byte),
 
-		.o_SPI_Clk (spi_board_if.spi_if.clk),
+		.o_SPI_Clk (spi_board_if.cb),
 		.i_SPI_POCI(spi_board_if.spi_if.poci),
 		.o_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_CS_n(spi_board_if.controller_spi_cs_n)
@@ -667,16 +699,16 @@ module tb_top();
 	SPI_Peripheral #(
 		.SPI_MODE(SPI_MODE)
 	) spi_p(
-		.i_Rst_L(spi_board_if.peripheral_rst_l),
-		.i_Clk(spi_board_if.clk),
+		.i_Rst_L(spi_board_if.cb.peripheral_rst_l),
+		.i_Clk(spi_board_if.cb),
 		
-		.i_TX_DV(spi_board_if.peripheral_tx_dv),
-		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
+		.i_TX_DV(spi_board_if.cb.peripheral_tx_dv),
+		.i_TX_Byte(spi_board_if.cb.peripheral_tx_byte),
 
-		.o_RX_DV(spi_board_if.peripheral_rx_dv),
-		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
+		.o_RX_DV(spi_board_if.cb.peripheral_rx_dv),
+		.o_RX_Byte(spi_board_if.cb.peripheral_rx_byte),
 
-		.i_SPI_Clk(spi_board_if.spi_if.clk),
+		.i_SPI_Clk(spi_board_if.cb),
 		.i_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_POCI(spi_board_if.spi_if.poci),
 		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
