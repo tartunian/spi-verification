@@ -99,23 +99,22 @@ interface spi_board_io
 	spi_io spi_if();
 
 	clocking cb @(posedge clk);
-		input 
-		controller_rx_dv,
-		controller_rx_byte,
-		controller_rx_count,
-		controller_tx_ready,
-		peripheral_rx_dv,
-		peripheral_rx_byte,
-		controller_spi_cs_n;
-		output
-		controller_tx_dv,
-		controller_tx_byte,
-		controller_tx_count,
-		controller_rst_l,
-		peripheral_tx_dv,
-		peripheral_tx_byte,
-		peripheral_rst_l,
-		peripheral_spi_cs_n;
+		//default input #10 output #1;
+		input controller_rx_dv;
+		input controller_rx_byte;
+		input controller_rx_count;
+		input peripheral_rx_dv;
+		input controller_tx_ready;
+		input peripheral_rx_byte;
+		input controller_spi_cs_n;
+		output controller_tx_dv;
+		output controller_tx_byte;
+		output controller_tx_count;
+		output controller_rst_l;
+		output peripheral_tx_dv;
+		output peripheral_tx_byte;
+		output peripheral_rst_l;
+		output peripheral_spi_cs_n;
 	endclocking
 /*
 	SPI_Peripheral #(
@@ -434,7 +433,7 @@ class spi_monitor extends spi_transactor;
 
 						`DEBUG($sformatf("Waiting on peripheral_rx_dv (byte %3d)...", i));
 						@(vspi_board_if.cb.peripheral_rx_dv); //technically not viable to sample
-						
+						@(vspi_board_if.cb)
 						`DEBUG($sformatf("Collecting peripheral_rx_byte (byte %3d)...", i));
 						tr.data_actual[i] = vspi_board_if.cb.peripheral_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
@@ -448,7 +447,7 @@ class spi_monitor extends spi_transactor;
 
 						`DEBUG($sformatf("Waiting on controller_rx_dv (byte %3d)...", i));
 						@(vspi_board_if.cb.controller_rx_dv); // technically should not be viable to sample...
-						
+						@(vspi_board_if.cb);
 						`DEBUG($sformatf("Collecting controller_rx_byte (byte %3d)...", i));
 						tr.data_actual[i] = vspi_board_if.cb.controller_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
