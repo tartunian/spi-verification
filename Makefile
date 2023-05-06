@@ -12,7 +12,7 @@ run:
 	./simv -l simv.log +ntb_random_seed=$(SEED)
 
 compile:
-	vcs -l vcs.log -sverilog -debug_all -full64 $(RTL) $(SVTB)
+	vcs -l vcs.log -sverilog -debug_all -cm line -full64 $(RTL) $(SVTB)
 
 dve:
 	dve -vpd vcdplus.vpd &

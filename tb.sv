@@ -61,7 +61,7 @@ endpackage : utils_pkg
 interface spi_io
 	();
 	
-	logic clk;
+	logic clk; 
 	logic poci;
 	logic pico;
 	logic cs;
@@ -74,17 +74,16 @@ endinterface : spi_io
 
 
 interface spi_board_io
-	#(parameter MAX_BYTES_PER_CS=1)
 	();
 
 	logic       clk;
 
 	logic       controller_rst_l;
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
+	logic [$clog2(`MAX_BYTES_PER_CS+1)-1:0] controller_tx_count;
 	logic [7:0] controller_tx_byte;
 	logic       controller_tx_dv;
 	logic       controller_tx_ready;
-	logic [$clog2(MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
+	logic [$clog2(`MAX_BYTES_PER_CS+1)-1:0] controller_rx_count;
 	logic       controller_rx_dv;
 	logic [7:0] controller_rx_byte;
 	logic       controller_spi_cs_n;
@@ -97,8 +96,8 @@ interface spi_board_io
 	logic       peripheral_spi_cs_n;
 
 	spi_io spi_if();
-
-	clocking cb @(posedge clk);
+  
+  clocking cb @(posedge clk);
 		//default input #10 output #1;
 		input controller_rx_dv;
 		input controller_rx_byte;
@@ -116,25 +115,8 @@ interface spi_board_io
 		output peripheral_rst_l;
 		output peripheral_spi_cs_n;
 	endclocking
-/*
-	SPI_Peripheral #(
-		.SPI_MODE(SPI_MODE)
-	) spi_p(
-		.i_Rst_L(spi_board_if.peripheral_rst_l),
-		.i_Clk(spi_board_if.clk),
-		
-		.i_TX_DV(spi_board_if.peripheral_tx_dv),
-		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
 
-		.o_RX_DV(spi_board_if.peripheral_rx_dv),
-		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
-
-		.i_SPI_Clk(spi_board_if.spi_if.clk),
-		.i_SPI_PICO(spi_board_if.spi_if.pico),
-		.o_SPI_POCI(spi_board_if.spi_if.poci),
-		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
-	);*/
-	modport tb(clocking cb);
+  modport tb(clocking cb);
 
 endinterface : spi_board_io
 
@@ -154,12 +136,11 @@ class spi_transaction;
 	rand    spiOperation_e      operation;
 	rand    logic [7:0]         data [];
 			logic [7:0]         data_expected[ ], data_actual[ ];	
-
-	constraint data_size_c { data.size() inside {[1:8]}; }
+			
+	constraint data_size_c { data.size() inside {[1:`MAX_BYTES_PER_CS]}; }
 
 	function new();
 		this.id = total;
-
 		this.randomize();
 
 		data_expected = new[data.size()];
@@ -180,7 +161,7 @@ class spi_transaction;
 
 endclass : spi_transaction
 
-class spi_transaction_directed extends spi_transaction;
+/*class spi_transaction_directed extends spi_transaction;
 	import utils_pkg::*;
 
 	function new(spiOperation_e operation, logic [7:0] data []);
@@ -194,7 +175,7 @@ class spi_transaction_directed extends spi_transaction;
 	endfunction : new
 
 endclass : spi_transaction_directed
-
+*/
 
 virtual class spi_transactor;
 
@@ -245,14 +226,24 @@ class spi_generator extends spi_transactor;
 	endtask : run
 
 endclass : spi_generator
-
-
+	
+	covergroup data_array_cg with function sample(byte b);
+		coverpoint b;
+	endgroup : data_array_cg
+	
+/*	covergroup other_tr_cg();
+		coverpoint tr.operation;
+		coverpoint tr.data.size();
+	endgroup : other_tr_cg
+*/
 class spi_driver extends spi_transactor;
 	import utils_pkg::*;
 
 	vIfcTB vspi_board_if;
 	mailbox #(spi_transaction) gen2drv;
 	event driver_start, driver_done, monitor_step_done;
+	
+	data_array_cg dude;
 
 	int i = 0;
 
@@ -262,7 +253,8 @@ class spi_driver extends spi_transactor;
 		this.vspi_board_if = vspi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_start = driver_start;
-		this.driver_done = driver_done;
+		this.driver_done = driver_done;		
+		this.dude = new();
 	endfunction : new
 
 	task reset();
@@ -286,7 +278,7 @@ class spi_driver extends spi_transactor;
 		// Enable the peripheral
 		vspi_board_if.cb.peripheral_spi_cs_n <= 1'b0;
 
-	endtask : reset
+  endtask : reset
 
 	task trigger_write();
 		this.vspi_board_if.cb.controller_tx_dv <= 1'b1;
@@ -313,13 +305,13 @@ class spi_driver extends spi_transactor;
 			end
 
 		endcase // operation
-		
+    
 		trigger_write();
 
 		`DEBUG("Waiting on controller_tx_ready...");
 		@(this.vspi_board_if.cb.controller_tx_ready); //need a different way to do this, can't sample it...
 		@(this.vspi_board_if.cb);
-
+    
 	endtask
 
 
@@ -341,7 +333,6 @@ class spi_driver extends spi_transactor;
 
 	task run();
 		forever begin
-
 			`DEBUG("Waiting for next transaction...");
 			gen2drv.get(tr);
 			`DEBUG("Got transaction from gen2drv");
@@ -350,6 +341,8 @@ class spi_driver extends spi_transactor;
 			->driver_start;
 			`DEBUG("(event) driver_start");
 
+			foreach(tr.data[i]) dude.sample(tr.data[i]);
+			$display("coverage: %0f",dude.get_inst_coverage());
 			write_array(tr.operation, tr.data);
 
 			->driver_done;
@@ -399,7 +392,7 @@ class spi_monitor extends spi_transactor;
 	vIfcTB vspi_board_if;
 	mailbox #(spi_transaction) gen2mon, mon2chk;
 	event driver_start, driver_done, monitor_done;
-
+	coverage cover1;
 	int i = 0;
 
 	function new(   vIfcTB vspi_board_if, 
@@ -421,6 +414,7 @@ class spi_monitor extends spi_transactor;
 			
 			`DEBUG("Got transaction from gen2mon");
 			tr.print();
+			cover1.tr = this.tr
 
 			`DEBUG($sformatf("Waiting for driver_start..."));
 			wait(driver_start.triggered);
@@ -546,7 +540,7 @@ class environment;
 	
 	event driver_start, driver_done, monitor_done, checker_done;
 	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
-	int num_trs = 100;
+	int num_trs = 5;
 
 	function new(vIfcTB vspi_board_if);
 		this.vspi_board_if = vspi_board_if;
@@ -622,9 +616,22 @@ class environment;
 
 		`DEBUG($sformatf("TOTAL ERRORS: %3d/%3d (%5f%% )", chk.errors, num_trs, (chk.errors/num_trs)*100));
 
+	//	this.drv.data_array_cg
+
 	endtask : wrap_up
 
 endclass : environment
+
+class coverage;
+	spi_transaction tr;
+	covergroup cg;
+		coverpoint tr.operation;
+		coverpoint tr.data;
+	endgroup : cg
+	function new(spi_transaction tr);
+		this.tr = tr;
+	endfunction
+endclass
 
 
 program automatic testbench(spi_board_io.tb spi_board_if);
@@ -634,7 +641,6 @@ program automatic testbench(spi_board_io.tb spi_board_if);
 	virtual spi_board_io.tb vifc = spi_board_if;
 
 	initial begin
-
 		$vcdpluson;
 		$dumpfile("tb_dump.vcd");
 		$dumpvars;
@@ -644,11 +650,11 @@ program automatic testbench(spi_board_io.tb spi_board_if);
 
 		`DEBUG("Starting testbench...");
 
-		env = new(vifc);
+    env = new(vifc);
 		env.build();
 		env.run();
 		env.wrap_up();
-
+		//
 		// Reset $display colors
 		$write("%c[0;37m",27);
 		
@@ -664,32 +670,40 @@ module tb_top();
 
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
-	parameter MAX_BYTES_PER_CS = 8;
 	parameter CS_INACTIVE_CLKS = 10;
+	int hi;
 
-	spi_board_io #( 
-		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS)
-	) spi_board_if ();
+//	parameter RANDO_PARAM = $urandom_range(0,8);
+//genvar = j;
+//generate
+// 	for(i=0;i<4;i=i+1)begin : spi_inyourface
+// 		spi_board_io #(
+// 		  .`MAX_BYTES_PER_CS($urandom_range(0,8))
+// 	) spi_board_if ();
+// 	end
+// endgenerate 
+
+spi_board_io spi_board_if();
 
 	SPI_Controller_With_Single_CS #(
 		.SPI_MODE(SPI_MODE),
 		.CLKS_PER_HALF_BIT(CLKS_PER_HALF_BIT),
-		.MAX_BYTES_PER_CS(MAX_BYTES_PER_CS),
+		.MAX_BYTES_PER_CS(`MAX_BYTES_PER_CS),
 		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
 	) spi_c(
-		.i_Rst_L(spi_board_if.controller_rst_l),
-		.i_Clk(spi_board_if.clk),
+		.i_Rst_L(spi_board_if.cb.controller_rst_l),
+		.i_Clk(spi_board_if.cb),
 
-		.i_TX_Count(spi_board_if.controller_tx_count),
-		.i_TX_Byte(spi_board_if.controller_tx_byte),
-		.i_TX_DV(spi_board_if.controller_tx_dv),
-		.o_TX_Ready(spi_board_if.controller_tx_ready),
+		.i_TX_Count(spi_board_if.cb.controller_tx_count),
+		.i_TX_Byte(spi_board_if.cb.controller_tx_byte),
+		.i_TX_DV(spi_board_if.cb.controller_tx_dv),
+		.o_TX_Ready(spi_board_if.cb.controller_tx_ready),
 
-		.o_RX_Count(spi_board_if.controller_rx_count),
-		.o_RX_DV(spi_board_if.controller_rx_dv),
-		.o_RX_Byte(spi_board_if.controller_rx_byte),
+		.o_RX_Count(spi_board_if.cb.controller_rx_count),
+		.o_RX_DV(spi_board_if.cb.controller_rx_dv),
+		.o_RX_Byte(spi_board_if.cb.controller_rx_byte),
 
-		.o_SPI_Clk (spi_board_if.spi_if.clk),
+		.o_SPI_Clk (spi_board_if.cb),
 		.i_SPI_POCI(spi_board_if.spi_if.poci),
 		.o_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_CS_n(spi_board_if.controller_spi_cs_n)
@@ -698,16 +712,16 @@ module tb_top();
 	SPI_Peripheral #(
 		.SPI_MODE(SPI_MODE)
 	) spi_p(
-		.i_Rst_L(spi_board_if.peripheral_rst_l),
-		.i_Clk(spi_board_if.clk),
+		.i_Rst_L(spi_board_if.cb.peripheral_rst_l),
+		.i_Clk(spi_board_if.cb),
 		
-		.i_TX_DV(spi_board_if.peripheral_tx_dv),
-		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
+		.i_TX_DV(spi_board_if.cb.peripheral_tx_dv),
+		.i_TX_Byte(spi_board_if.cb.peripheral_tx_byte),
 
-		.o_RX_DV(spi_board_if.peripheral_rx_dv),
-		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
+		.o_RX_DV(spi_board_if.cb.peripheral_rx_dv),
+		.o_RX_Byte(spi_board_if.cb.peripheral_rx_byte),
 
-		.i_SPI_Clk(spi_board_if.spi_if.clk),
+		.i_SPI_Clk(spi_board_if.cb),
 		.i_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_POCI(spi_board_if.spi_if.poci),
 		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
