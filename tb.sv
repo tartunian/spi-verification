@@ -58,7 +58,6 @@ package utils_pkg;
 
 endpackage : utils_pkg
 
-
 interface spi_io
 	();
 	
@@ -99,23 +98,48 @@ interface spi_board_io
 
 	spi_io spi_if();
 
-	initial begin
+	clocking cb @(posedge clk);
+		input 
+		controller_rx_dv,
+		controller_rx_byte,
+		controller_rx_count,
+		controller_tx_ready,
+		peripheral_rx_dv,
+		peripheral_rx_byte,
+		controller_spi_cs_n;
+		output
+		controller_tx_dv,
+		controller_tx_byte,
+		controller_tx_count,
+		controller_rst_l,
+		peripheral_tx_dv,
+		peripheral_tx_byte,
+		peripheral_rst_l,
+		peripheral_spi_cs_n;
+	endclocking
+/*
+	SPI_Peripheral #(
+		.SPI_MODE(SPI_MODE)
+	) spi_p(
+		.i_Rst_L(spi_board_if.peripheral_rst_l),
+		.i_Clk(spi_board_if.clk),
+		
+		.i_TX_DV(spi_board_if.peripheral_tx_dv),
+		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
 
-		clk = 1'b0;
+		.o_RX_DV(spi_board_if.peripheral_rx_dv),
+		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
 
-		controller_rst_l = 1'b1;
-		controller_tx_count = 1;
-		controller_tx_byte = 1'b0;
-		controller_tx_dv = 1'b0;
-
-		peripheral_rst_l = 1'b1;
-		peripheral_tx_byte = 0;
-		peripheral_tx_dv = 1'b0;
-		peripheral_spi_cs_n = 1'b1;
-
-	end
+		.i_SPI_Clk(spi_board_if.spi_if.clk),
+		.i_SPI_PICO(spi_board_if.spi_if.pico),
+		.o_SPI_POCI(spi_board_if.spi_if.poci),
+		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
+	);*/
+	modport tb(clocking cb);
 
 endinterface : spi_board_io
+
+typedef virtual spi_board_io.tb vIfcTB;
 
 typedef enum {
 	CONTROLLER_WRITE,
@@ -227,43 +251,50 @@ endclass : spi_generator
 class spi_driver extends spi_transactor;
 	import utils_pkg::*;
 
-	virtual spi_board_io spi_board_if;
+	vIfcTB vspi_board_if;
 	mailbox #(spi_transaction) gen2drv;
 	event driver_start, driver_done, monitor_step_done;
 
 	int i = 0;
 
-	function new(   virtual spi_board_io spi_board_if, 
+	function new(   vIfcTB vspi_board_if, 
 					mailbox #(spi_transaction) gen2drv,
 					event driver_start, driver_done);
-		this.spi_board_if = spi_board_if;
+		this.vspi_board_if = vspi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_start = driver_start;
 		this.driver_done = driver_done;
 	endfunction : new
 
 	task reset();
-		repeat(10) @(posedge spi_board_if.clk);
-		
-		spi_board_if.controller_rst_l  = 1'b0;
-		spi_board_if.peripheral_rst_l  = 1'b0;
-		repeat(10) @(posedge spi_board_if.clk);
+		repeat(10) @(vspi_board_if.cb);
+		//$display("Entering reset");
+		vspi_board_if.cb.controller_rst_l  <= 1'b0;
+		vspi_board_if.cb.controller_tx_byte <= 1'b0;
+		vspi_board_if.cb.controller_tx_dv <= 1'b0;
+		vspi_board_if.cb.controller_tx_count <= 1;
 
-		spi_board_if.controller_rst_l  = 1'b1;
-		spi_board_if.peripheral_rst_l  = 1'b1;
+		vspi_board_if.cb.peripheral_rst_l  <= 1'b0;
+		vspi_board_if.cb.peripheral_tx_byte <= 0;
+		vspi_board_if.cb.peripheral_tx_dv <= 1'b0;
+		vspi_board_if.cb.peripheral_spi_cs_n <= 1'b1;
+
+		repeat(10) @(vspi_board_if.cb);
+
+		vspi_board_if.cb.controller_rst_l  <= 1'b1;
+		vspi_board_if.cb.peripheral_rst_l  <= 1'b1;
 
 		// Enable the peripheral
-		spi_board_if.peripheral_spi_cs_n = 1'b0;
+		vspi_board_if.cb.peripheral_spi_cs_n <= 1'b0;
 
 	endtask : reset
 
-
 	task trigger_write();
-		this.spi_board_if.controller_tx_dv <= 1'b1;
-		this.spi_board_if.peripheral_tx_dv <= 1'b1;
-		@(posedge this.spi_board_if.clk);
-		this.spi_board_if.controller_tx_dv <= 1'b0;
-		this.spi_board_if.peripheral_tx_dv <= 1'b0;
+		this.vspi_board_if.cb.controller_tx_dv <= 1'b1;
+		this.vspi_board_if.cb.peripheral_tx_dv <= 1'b1;
+		@(this.vspi_board_if.cb);
+		this.vspi_board_if.cb.controller_tx_dv <= 1'b0;
+		this.vspi_board_if.cb.peripheral_tx_dv <= 1'b0;
 	endtask
 
 
@@ -274,12 +305,12 @@ class spi_driver extends spi_transactor;
 		case(operation)
 			
 			CONTROLLER_WRITE : begin
-				this.spi_board_if.controller_tx_byte <= data;
-				this.spi_board_if.peripheral_tx_byte <= 8'h00;
+				this.vspi_board_if.cb.controller_tx_byte <= data;
+				this.vspi_board_if.cb.peripheral_tx_byte <= 8'h00;
 			end
 			PERIPHERAL_WRITE : begin
-				this.spi_board_if.controller_tx_byte <= 8'h00;
-				this.spi_board_if.peripheral_tx_byte <= data;
+				this.vspi_board_if.cb.controller_tx_byte <= 8'h00;
+				this.vspi_board_if.cb.peripheral_tx_byte <= data;
 			end
 
 		endcase // operation
@@ -287,16 +318,16 @@ class spi_driver extends spi_transactor;
 		trigger_write();
 
 		`DEBUG("Waiting on controller_tx_ready...");
-		@(posedge this.spi_board_if.controller_tx_ready);
-		@(posedge this.spi_board_if.clk);
+		@(this.vspi_board_if.cb.controller_tx_ready); //need a different way to do this, can't sample it...
+		@(this.vspi_board_if.cb);
 
 	endtask
 
 
 	task write_array(spiOperation_e operation, logic [7:0] data []);
 		
-		@(posedge this.spi_board_if.clk);
-		this.spi_board_if.controller_tx_count <= data.size();
+		@(this.vspi_board_if.cb);
+		this.vspi_board_if.cb.controller_tx_count <= data.size();
 
 		`DEBUG($sformatf("Writing %3d bytes...", data.size()));
 
@@ -304,7 +335,7 @@ class spi_driver extends spi_transactor;
 			write(operation, data[i]);			
 		end
 		
-		@(posedge this.spi_board_if.clk);
+		@(this.vspi_board_if.cb);
 		`DEBUG($sformatf("Wrote %3d bytes", data.size()));
 	endtask
 
@@ -366,16 +397,16 @@ endclass : spi_scoreboard
 class spi_monitor extends spi_transactor;
 	import utils_pkg::*;
 
-	virtual spi_board_io spi_board_if;
+	vIfcTB vspi_board_if;
 	mailbox #(spi_transaction) gen2mon, mon2chk;
 	event driver_start, driver_done, monitor_done;
 
 	int i = 0;
 
-	function new(   virtual spi_board_io spi_board_if, 
+	function new(   vIfcTB vspi_board_if, 
 					mailbox #(spi_transaction) gen2mon, mon2chk,
 					event driver_start, driver_done, monitor_done);
-		this.spi_board_if = spi_board_if;
+		this.vspi_board_if = vspi_board_if;
 		this.gen2mon = gen2mon;
 		this.mon2chk = mon2chk;
 		this.driver_start = driver_start;
@@ -402,10 +433,10 @@ class spi_monitor extends spi_transactor;
 					for(i=0; i<tr.data.size(); i+=1) begin
 
 						`DEBUG($sformatf("Waiting on peripheral_rx_dv (byte %3d)...", i));
-						@(negedge spi_board_if.peripheral_rx_dv);
+						@(vspi_board_if.cb.peripheral_rx_dv); //technically not viable to sample
 						
 						`DEBUG($sformatf("Collecting peripheral_rx_byte (byte %3d)...", i));
-						tr.data_actual[i] = spi_board_if.peripheral_rx_byte;
+						tr.data_actual[i] = vspi_board_if.cb.peripheral_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
 					end
 					
@@ -416,10 +447,10 @@ class spi_monitor extends spi_transactor;
 					for(i=0; i<tr.data.size(); i+=1) begin
 
 						`DEBUG($sformatf("Waiting on controller_rx_dv (byte %3d)...", i));
-						@(negedge spi_board_if.controller_rx_dv);
+						@(vspi_board_if.cb.controller_rx_dv); // technically should not be viable to sample...
 						
 						`DEBUG($sformatf("Collecting controller_rx_byte (byte %3d)...", i));
-						tr.data_actual[i] = spi_board_if.controller_rx_byte;
+						tr.data_actual[i] = vspi_board_if.cb.controller_rx_byte;
 						`DEBUG($sformatf("tr.data_actual: %p", tr.data_actual));
 					end
 
@@ -506,7 +537,7 @@ endclass : spi_checker
 class environment;
 	import utils_pkg::*;
 
-	virtual spi_board_io spi_board_if;
+	vIfcTB vspi_board_if;
 	
 	spi_generator gen;
 	spi_scoreboard scb;
@@ -518,8 +549,8 @@ class environment;
 	mailbox #(spi_transaction) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
 	int num_trs = 100;
 
-	function new(virtual spi_board_io spi_board_if);
-		this.spi_board_if = spi_board_if;
+	function new(vIfcTB vspi_board_if);
+		this.vspi_board_if = vspi_board_if;
 	endfunction : new
 
 	function build();
@@ -530,8 +561,8 @@ class environment;
 		mon2chk = new(num_trs);
 		gen = new(gen2drv, gen2scb, gen2mon, driver_done, monitor_done, checker_done, num_trs);
 		scb = new(gen2scb, scb2chk, num_trs);
-		drv = new(spi_board_if, gen2drv, driver_start, driver_done);
-		mon = new(spi_board_if, gen2mon, mon2chk, driver_start, driver_done, monitor_done);
+		drv = new(vspi_board_if, gen2drv, driver_start, driver_done);
+		mon = new(vspi_board_if, gen2mon, mon2chk, driver_start, driver_done, monitor_done);
 		chk = new(scb2chk, mon2chk, driver_done, monitor_done, checker_done);
 	endfunction : build
 
@@ -597,10 +628,11 @@ class environment;
 endclass : environment
 
 
-program automatic testbench(spi_board_io spi_board_if);
+program automatic testbench(spi_board_io.tb spi_board_if);
 	import utils_pkg::*;
 
 	environment env;
+	virtual spi_board_io.tb vifc = spi_board_if;
 
 	initial begin
 
@@ -613,7 +645,7 @@ program automatic testbench(spi_board_io spi_board_if);
 
 		`DEBUG("Starting testbench...");
 
-		env = new(spi_board_if);
+		env = new(vifc);
 		env.build();
 		env.run();
 		env.wrap_up();
@@ -682,7 +714,9 @@ module tb_top();
 		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
 	);
 
-	testbench tb(spi_board_if);
+	initial spi_board_if.clk <= 0;
+
+	testbench tb(spi_board_if.tb);
 
 	always #10 spi_board_if.clk <= ~spi_board_if.clk;
 
