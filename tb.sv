@@ -58,6 +58,8 @@ package utils_pkg;
 
 endpackage : utils_pkg
 
+`define MAX_BYTES_PER_CS 4
+
 interface spi_io
 	();
 	
@@ -182,20 +184,20 @@ endclass : spi_transaction_directed
 virtual class spi_transactor
 	#(parameter MAX_BYTES_PER_CS);
 
-	spi_transaction #(MAX_BYTES_PER_CS) tr;
+	spi_transaction #(`MAX_BYTES_PER_CS) tr;
 	pure virtual task run();
 
 endclass : spi_transactor
 
 
-class spi_generator #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTES_PER_CS);	
+class spi_generator #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(`MAX_BYTES_PER_CS);	
 	import utils_pkg::*;
 
-	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon;
+	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon;
 	event driver_done, monitor_done, checker_done;
 	int num_trs;
 
-	function new(   mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon,
+	function new(   mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon,
 					event driver_done, monitor_done, checker_done, int num_trs);
 		this.gen2drv = gen2drv;
 		this.gen2scb = gen2scb;
@@ -238,25 +240,25 @@ endclass : spi_generator
 		coverpoint tr.data.size();
 	endgroup : other_tr_cg
 */
-class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor;
+class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(`MAX_BYTES_PER_CS);
 	import utils_pkg::*;
 
-	vIfcTB #(MAX_BYTES_PER_CS) vspi_board_if;
-	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv;
+	vIfcTB #(`MAX_BYTES_PER_CS) vspi_board_if;
+	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2drv;
 	event driver_start, driver_done, monitor_step_done;
 	
-	data_array_cg dude;
+//	data_array_cg dude;
 
 	int i = 0;
 
-	function new(   vIfcTB #(MAX_BYTES_PER_CS) vspi_board_if, 
-					mailbox #(spi_transaction(#MAX_BYTES_PER_CS)) gen2drv,
+	function new(   vIfcTB #(`MAX_BYTES_PER_CS) vspi_board_if, 
+					mailbox #(spi_transaction#(`MAX_BYTES_PER_CS)) gen2drv,
 					event driver_start, driver_done);
 		this.vspi_board_if = vspi_board_if;
 		this.gen2drv = gen2drv;
 		this.driver_start = driver_start;
 		this.driver_done = driver_done;		
-		this.dude = new();
+		//this.dude = new();
 	endfunction : new
 
 	task reset();
@@ -343,8 +345,8 @@ class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor;
 			->driver_start;
 			`DEBUG("(event) driver_start");
 
-			foreach(tr.data[i]) dude.sample(tr.data[i]);
-			$display("coverage: %0f",dude.get_inst_coverage());
+//			foreach(tr.data[i]) dude.sample(tr.data[i]);
+//			$display("coverage: %0f",dude.get_inst_coverage());
 			write_array(tr.operation, tr.data);
 
 			->driver_done;
@@ -355,14 +357,14 @@ class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor;
 endclass : spi_driver
 
 
-class spi_scoreboard #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTES_PER_CS);
+class spi_scoreboard #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(`MAX_BYTES_PER_CS);
 	import utils_pkg::*;
 
-	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2scb, scb2chk;
+	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2scb, scb2chk;
 	event driver_step_done, driver_done;
 	int num_trs;
 
-	function new(   mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2scb, scb2chk,
+	function new(   mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2scb, scb2chk,
 					int num_trs);
 		this.gen2scb = gen2scb;
 		this.scb2chk = scb2chk;
@@ -388,17 +390,17 @@ class spi_scoreboard #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_
 endclass : spi_scoreboard
 
 
-class spi_monitor #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTES_PER_CS);
+class spi_monitor #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(`MAX_BYTES_PER_CS);
 	import utils_pkg::*;
 
-	vIfcTB #(MAX_BYTES_PER_CS) vspi_board_if;
-	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2mon, mon2chk;
+	vIfcTB #(`MAX_BYTES_PER_CS) vspi_board_if;
+	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2mon, mon2chk;
 	event driver_start, driver_done, monitor_done;
-	coverage cover1;
+	//coverage cover1;
 	int i = 0;
 
-	function new(   vIfcTB #(MAX_BYTES_PER_CS) vspi_board_if, 
-					mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2mon, mon2chk,
+	function new(   vIfcTB #(`MAX_BYTES_PER_CS) vspi_board_if, 
+					mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2mon, mon2chk,
 					event driver_start, driver_done, monitor_done);
 		this.vspi_board_if = vspi_board_if;
 		this.gen2mon = gen2mon;
@@ -416,7 +418,7 @@ class spi_monitor #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
 			
 			`DEBUG("Got transaction from gen2mon");
 			tr.print();
-			cover1.tr = this.tr
+		//	cover1.tr = this.tr
 
 			`DEBUG($sformatf("Waiting for driver_start..."));
 			wait(driver_start.triggered);
@@ -466,16 +468,16 @@ class spi_monitor #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
 endclass : spi_monitor
 
 
-class spi_checker #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTES_PER_CS);
+class spi_checker #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(`MAX_BYTES_PER_CS);
 	import utils_pkg::*;
 
-	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) scb2chk, mon2chk;
+	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) scb2chk, mon2chk;
 	event driver_done, monitor_done, checker_done;
-	spi_transaction #(MAX_BYTES_PER_CS) scb_tr, mon_tr;
+	spi_transaction #(`MAX_BYTES_PER_CS) scb_tr, mon_tr;
 	int errors;
 	int error = 0;
 
-	function new(	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) scb2chk, mon2chk, 
+	function new(	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) scb2chk, mon2chk, 
 					event driver_done, monitor_done, checker_done);
 		this.scb2chk = scb2chk;
 		this.mon2chk = mon2chk;
@@ -532,19 +534,19 @@ endclass : spi_checker
 class environment #(parameter MAX_BYTES_PER_CS);
 	import utils_pkg::*;
 
-	vIfcTB #(MAX_BYTES_PER_CS) vspi_board_if;
+	vIfcTB #(`MAX_BYTES_PER_CS) vspi_board_if;
 	
-	spi_generator #(MAX_BYTES_PER_CS) gen;
-	spi_scoreboard #(MAX_BYTES_PER_CS) scb;
-	spi_driver #(MAX_BYTES_PER_CS) drv;
-	spi_monitor #(MAX_BYTES_PER_CS) mon;
-	spi_checker #(MAX_BYTES_PER_CS) chk;
+	spi_generator #(`MAX_BYTES_PER_CS) gen;
+	spi_scoreboard #(`MAX_BYTES_PER_CS) scb;
+	spi_driver #(`MAX_BYTES_PER_CS) drv;
+	spi_monitor #(`MAX_BYTES_PER_CS) mon;
+	spi_checker #(`MAX_BYTES_PER_CS) chk;
 	
 	event driver_start, driver_done, monitor_done, checker_done;
-	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
+	mailbox #(spi_transaction #(`MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
 	int num_trs = 5;
 
-	function new(vIfcTB #(MAX_BYTES_PER_CS) vspi_board_if);
+	function new(vIfcTB #(`MAX_BYTES_PER_CS) vspi_board_if);
 		this.vspi_board_if = vspi_board_if;
 	endfunction : new
 
@@ -586,7 +588,7 @@ class environment #(parameter MAX_BYTES_PER_CS);
 	endtask : run
 
 	task wrap_up();
-		spi_transaction #(MAX_BYTES_PER_CS) tr;
+		spi_transaction #(`MAX_BYTES_PER_CS) tr;
 
 		`DEBUG("Wrapping up...");
 		`DEBUG("Cleaning mailboxes...");
@@ -624,7 +626,7 @@ class environment #(parameter MAX_BYTES_PER_CS);
 
 endclass : environment
 
-class coverage;
+/*class coverage;
 	spi_transaction tr;
 	covergroup cg;
 		coverpoint tr.operation;
@@ -634,12 +636,12 @@ class coverage;
 		this.tr = tr;
 	endfunction
 endclass
-
+*/
 
 program automatic testbench #(parameter MAX_BYTES_PER_CS) (spi_board_io.tb spi_board_if);
 	import utils_pkg::*;
 
-	environment #(MAX_BYTES_PER_CS) env;
+	environment #(`MAX_BYTES_PER_CS) env;
 	virtual spi_board_io.tb vifc = spi_board_if;
 
 	initial begin
@@ -685,7 +687,7 @@ module tb_top();
 // 	end
 // endgenerate 
 
-spi_board_io spi_board_if();
+spi_board_io #(`MAX_BYTES_PER_CS) spi_board_if();
 
 	SPI_Controller_With_Single_CS #(
 		.SPI_MODE(SPI_MODE),
@@ -693,19 +695,19 @@ spi_board_io spi_board_if();
 		.MAX_BYTES_PER_CS(`MAX_BYTES_PER_CS),
 		.CS_INACTIVE_CLKS(CS_INACTIVE_CLKS)
 	) spi_c(
-		.i_Rst_L(spi_board_if.cb.controller_rst_l),
-		.i_Clk(spi_board_if.cb),
+		.i_Rst_L(spi_board_if.controller_rst_l),
+		.i_Clk(spi_board_if.clk),
 
-		.i_TX_Count(spi_board_if.cb.controller_tx_count),
-		.i_TX_Byte(spi_board_if.cb.controller_tx_byte),
-		.i_TX_DV(spi_board_if.cb.controller_tx_dv),
-		.o_TX_Ready(spi_board_if.cb.controller_tx_ready),
+		.i_TX_Count(spi_board_if.controller_tx_count),
+		.i_TX_Byte(spi_board_if.controller_tx_byte),
+		.i_TX_DV(spi_board_if.controller_tx_dv),
+		.o_TX_Ready(spi_board_if.controller_tx_ready),
 
-		.o_RX_Count(spi_board_if.cb.controller_rx_count),
-		.o_RX_DV(spi_board_if.cb.controller_rx_dv),
-		.o_RX_Byte(spi_board_if.cb.controller_rx_byte),
+		.o_RX_Count(spi_board_if.controller_rx_count),
+		.o_RX_DV(spi_board_if.controller_rx_dv),
+		.o_RX_Byte(spi_board_if.controller_rx_byte),
 
-		.o_SPI_Clk (spi_board_if.cb),
+		.o_SPI_Clk (spi_board_if.spi_if.clk),
 		.i_SPI_POCI(spi_board_if.spi_if.poci),
 		.o_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_CS_n(spi_board_if.controller_spi_cs_n)
@@ -714,16 +716,16 @@ spi_board_io spi_board_if();
 	SPI_Peripheral #(
 		.SPI_MODE(SPI_MODE)
 	) spi_p(
-		.i_Rst_L(spi_board_if.cb.peripheral_rst_l),
-		.i_Clk(spi_board_if.cb),
+		.i_Rst_L(spi_board_if.peripheral_rst_l),
+		.i_Clk(spi_board_if.clk),
 		
-		.i_TX_DV(spi_board_if.cb.peripheral_tx_dv),
-		.i_TX_Byte(spi_board_if.cb.peripheral_tx_byte),
+		.i_TX_DV(spi_board_if.peripheral_tx_dv),
+		.i_TX_Byte(spi_board_if.peripheral_tx_byte),
 
-		.o_RX_DV(spi_board_if.cb.peripheral_rx_dv),
-		.o_RX_Byte(spi_board_if.cb.peripheral_rx_byte),
+		.o_RX_DV(spi_board_if.peripheral_rx_dv),
+		.o_RX_Byte(spi_board_if.peripheral_rx_byte),
 
-		.i_SPI_Clk(spi_board_if.cb),
+		.i_SPI_Clk(spi_board_if.spi_if.clk),
 		.i_SPI_PICO(spi_board_if.spi_if.pico),
 		.o_SPI_POCI(spi_board_if.spi_if.poci),
 		.i_SPI_CS_n(spi_board_if.peripheral_spi_cs_n)
@@ -731,7 +733,7 @@ spi_board_io spi_board_if();
 
 	initial spi_board_if.clk <= 0;
 
-	testbench #(MAX_BYTES_PER_CS) tb(spi_board_if.tb);
+	testbench #(`MAX_BYTES_PER_CS) tb(spi_board_if.tb);
 
 	always #10 spi_board_if.clk <= ~spi_board_if.clk;
 
