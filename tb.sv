@@ -129,6 +129,110 @@ typedef enum {
 	PERIPHERAL_WRITE
 } spiOperation_e;
 
+// Coverage for the data values
+	class Coverage; // make a class for each program
+
+		event checked;
+		int i, spi_mode, max_bytes;
+
+		Transaction tr;
+
+		function new(event checked,
+					Transaction tr,
+					int i,
+					int spi_mode,
+					int max_bytes);
+			this.i = i;
+			this.checked = checked;
+			this.tr = tr;
+			this.spi_mode = spi_mode;
+			// cgmat_nz = new(i);
+			// cgmat_z = new(i);
+			cg_SPIModule_top = new();
+			cg_controller_meta = new();
+			cg_periph_meta = new();
+			cg_tr_messages = new();
+		endfunction
+
+
+		covergroup cg_SPIModule_top();
+			// Did we try each SPI mode?
+			// How many Max_bytes_per_cs values did we try?
+			cp_SPI_MODE: coverpoint spi_mode;
+			cp_MAX_BYTES: coverpoint max_bytes;
+		endgroup : cg_SPIModule_top
+
+		covergroup cg_controller_meta();
+			// Did the controller perform a write?
+			// Did the controller perform a read?
+			cg_ctrlRW: coverpoint tr.operation { 
+			bins ctrl_write = {0};} 
+			// Did we try write then read and read then write?
+			cg_ctrlRW_seq: coverpoint tr.operation; // not sure how to check this yet...
+			// What variety in bytes per transaction?
+			cg_msg_size: coverpoint tr.data.size(); // gotta define the bins 
+			// What sequence of message sizes did we try?
+			cg_msg_size_seq: coverpoint tr.data.size(); // again, sequential checks are something...
+		endgroup : cg_controller
+
+		covergroup cg_periph_meta();
+			// Did the peripheral perform a write?
+			// Did the peripheral perform a read?
+			cg_periphRW: coverpoint tr.operation{
+			bins periph_write = {1};}
+			// Did we try write then read and read then write?
+			cg_periphRW_seq: coverpoint tr.operation{
+			bins read_write = {0 => 1};
+			bins write_read = {1 => 0};
+			// What variety of bytes per transaction?
+			cg_msg_size: coverpoint tr.data.size();
+			// What sequence of message sizes did we try?
+			cg_msg_size_seq: coverpoint tr.data.size();
+		endgroup : cg_periph
+
+		covergroup cg_tr_messages();
+			// Did we send all FF's?
+			// Did we send all 00's?
+			cp_tr_data_edge: coverpoint tr.data_in
+		endgroup : cg_tr_messages
+
+		// Good covergroup - checks the following
+		//	for all i:
+		//	-A[i] happened, -B[i] happened?
+		//	-A[i]x-B[i], -A[i]xB[i], 
+		//		A[i]x-B[i], A[i]xB[i] happened?
+
+		// covergroup cgmat_nz(int i) @(checked);
+		// 	option.per_instance = 1;
+		// 	cp_mat_A: coverpoint tr.matrixA[i][7];
+		// 	cp_mat_B: coverpoint tr.matrixB[i][7];
+		// 	cp_mat_C: coverpoint tr.matrixC[i][7];
+		// 	// Bad approach example
+		// 	// bins signs[] = {[-128:0], [1:$]};
+		// 	cp_AxB: cross cp_mat_A, cp_mat_B;
+		// endgroup;
+
+		// Good covergroup - checks the following
+		//	for all i:
+		//	- A[i] == 0, B[i] == 0 happened?
+		//	- A[i]xB[i] happened?
+		
+		// covergroup cgmat_z(int i) @(checked);
+		// 	option.per_instance = 1;
+		// 	cp_mat_A_zero: coverpoint tr.matrixA[i]{
+		// 		bins zero = {0};
+		// 	}
+		// 	cp_mat_B_zero: coverpoint tr.matrixB[i]{
+		// 		bins zero = {0};
+		// 	}
+		// 	cp_mat_C_zero: coverpoint tr.matrixC[i]{
+		// 		bins zero = {0};
+		// 	}
+		// 	cp_AxB: cross cp_mat_A_zero, cp_mat_B_zero;
+		// endgroup;
+
+	endclass : Coverage
+
 
 class spi_transaction
 	#(parameter MAX_BYTES_PER_CS);
