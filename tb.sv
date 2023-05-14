@@ -151,6 +151,15 @@ class spi_transaction
 		total++;
 	endfunction : new
 
+	function copy(spi_transaction #(MAX_BYTES_PER_CS) tr);
+		this.total = tr.total;
+		this.id = tr.id;
+		this.operation = tr.operation;
+		this.data = tr.data;
+		this.data_expected = tr.data_expected;
+		this.data_actual = tr.data_actual;
+	endfunction : copy	
+
 	function string print();
 		$write("%c[0;37m",27);
 		`DEBUG_INDENT("=====spi_transaction=====");
@@ -195,32 +204,30 @@ endclass : spi_transactor
 
 		spi_transaction #(MAX_BYTES_PER_CS) tr;
 
-		function new(event checked,
-					spi_transaction #(MAX_BYTES_PER_CS) tr,
-					int i,
-					int spi_mode,
-					int max_bytes);
-			this.i = i;
-			this.checker_done = checked;
+		function new(event checker_done,
+					spi_transaction #(MAX_BYTES_PER_CS) tr,int i);
+			this.checker_done = checker_done;
 			this.tr = tr;
-			this.spi_mode = spi_mode;
+			this.i = i;
+			//this.spi_mode = spi_mode;
 			// cgmat_nz = new(i);
 			// cgmat_z = new(i);
 			cg_SPIModule_top = new();
 			cg_controller_meta = new();
 			cg_periph_meta = new();
-			cg_tr_messages = new();
+			cg_tr_messages = new(i);
 		endfunction
 
 
-		covergroup cg_SPIModule_top();
+		covergroup cg_SPIModule_top() @(checker_done);
 			// Did we try each SPI mode?
 			// How many Max_bytes_per_cs values did we try?
 			cp_SPI_MODE: coverpoint spi_mode;
 			cp_MAX_BYTES: coverpoint max_bytes;
 		endgroup : cg_SPIModule_top
 
-		covergroup cg_controller_meta();
+		covergroup cg_controller_meta() @(checker_done);
+			option.per_instance = 1;
 			// Did the controller perform a write?
 			// Did the controller perform a read?
 			cp_ctrlRW: coverpoint tr.operation { 
@@ -233,7 +240,8 @@ endclass : spi_transactor
 			cp_msg_size_seq: coverpoint tr.data.size(); // again, sequential checks are something...
 		endgroup : cg_controller_meta
 
-		covergroup cg_periph_meta();
+		covergroup cg_periph_meta() @(checker_done);
+			option.per_instance = 1;
 			// Did the peripheral perform a write?
 			// Did the peripheral perform a read?
 			cp_periphRW: coverpoint tr.operation{
@@ -249,10 +257,10 @@ endclass : spi_transactor
 			cp_msg_size_seq: coverpoint tr.data.size();
 		endgroup : cg_periph_meta
 
-		covergroup cg_tr_messages();
+		covergroup cg_tr_messages(int i) @(checker_done);
 			// Did we send all FF's?
 			// Did we send all 00's?
-			cp_tr_data_edge: coverpoint tr.data_in;
+			cp_tr_data_edge: coverpoint tr.data[i];
 		endgroup : cg_tr_messages
 
 		// Good covergroup - checks the following
@@ -334,9 +342,9 @@ class spi_generator #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_B
 
 endclass : spi_generator
 	
-	covergroup data_array_cg with function sample(byte b);
-		coverpoint b;
-	endgroup : data_array_cg
+	// covergroup data_array_cg with function sample(byte b);
+	// 	coverpoint b;
+	// endgroup : data_array_cg
 	
 /*	covergroup other_tr_cg();
 		coverpoint tr.operation;
@@ -579,6 +587,10 @@ class spi_checker #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
 	spi_transaction #(MAX_BYTES_PER_CS) scb_tr, mon_tr;
 	int errors;
 	int error = 0;
+	Coverage #(MAX_BYTES_PER_CS) cov_objs [MAX_BYTES_PER_CS];
+	spi_transaction #(MAX_BYTES_PER_CS) static_tr;
+
+	real current_cov_periph, current_cov_control, current_cov_top;
 
 	function new(	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) scb2chk, mon2chk, 
 					event driver_done, monitor_done, checker_done);
@@ -587,6 +599,10 @@ class spi_checker #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
 		this.driver_done = driver_done;
 		this.monitor_done = monitor_done;
 		this.checker_done = checker_done;
+		static_tr = new();
+		foreach(cov_objs[i])
+			cov_objs[i] = new(checker_done, static_tr, i);
+
 	endfunction : new
 
 	task run();
@@ -618,6 +634,12 @@ class spi_checker #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
 
 			`DEBUG("Got transaction from scb2chk");
 			scb_tr.print();
+			static_tr.copy(scb_tr);
+			foreach(cov_objs[i]) begin
+				//current_cov_top = cov_objs[i].cg_SPIModule_top.get_inst_coverage();
+				current_cov_control = cov_objs[i].cg_controller_meta.get_inst_coverage();
+				current_cov_periph = cov_objs[i].cg_periph_meta.get_inst_coverage();
+			end
 
 			error = scb_tr.data_expected != mon_tr.data_actual;
 
@@ -644,10 +666,11 @@ class environment #(parameter MAX_BYTES_PER_CS);
 	spi_driver #(MAX_BYTES_PER_CS) drv;
 	spi_monitor #(MAX_BYTES_PER_CS) mon;
 	spi_checker #(MAX_BYTES_PER_CS) chk;
+	//Coverage #(MAX_BYTES_PER_CS) cvr;
 	
 	event driver_start, driver_done, monitor_done, checker_done;
 	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
-	int num_trs = 5;
+	int num_trs = 10;
 
 	function new(virtual spi_board_io#(MAX_BYTES_PER_CS).tb vspi_board_if);
 		this.vspi_board_if = vspi_board_if;
@@ -664,6 +687,7 @@ class environment #(parameter MAX_BYTES_PER_CS);
 		drv = new(vspi_board_if, gen2drv, driver_start, driver_done);
 		mon = new(vspi_board_if, gen2mon, mon2chk, driver_start, driver_done, monitor_done);
 		chk = new(scb2chk, mon2chk, driver_done, monitor_done, checker_done);
+		//cvr = new(checker_done, 1, spi_mode, max_bytes)
 	endfunction : build
 
 	task run();
@@ -778,7 +802,7 @@ module tb_top();
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
 	parameter CS_INACTIVE_CLKS = 10;
-	int hi;
+	//int hi;
 
 //	parameter RANDO_PARAM = $urandom_range(0,8);
 //genvar = j;
