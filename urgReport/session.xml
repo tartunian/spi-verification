@@ -1,4 +1,4 @@
-<session version="1.1" release="O-2018.09-SP1" timestp="2023-05-16 03:51:38 GMT">
+<session version="1.1" release="O-2018.09-SP1" timestp="2023-05-23 03:42:54 GMT">
   <hvp>
     <datadef>
       <metdef name="Group" type="percent" aggregator="average" builtin="1" />
@@ -6,22 +6,19 @@
   </hvp>
   <old_coverage>
   <scope type="top" name="top">
-    <metric name="Group" value="34.375%" />
+    <metric name="Group" value="100%" />
   </scope>
   <scope type="instance" name="top">
   </scope>
   <scope type="group" name="top">
-    <scope type="group" name="$unit::Coverage#(4)::cg_SPIModule_top">
-      <metric name="Group" value="1.5625%" />
+    <scope type="group" name="$unit::module_coverage#(4)::cg_controller_meta">
+      <metric name="Group" value="100%" />
     </scope>
-    <scope type="group" name="$unit::Coverage#(4)::cg_tr_messages">
-      <metric name="Group" value="34.375%" />
+    <scope type="group" name="$unit::module_coverage#(4)::cg_periph_meta">
+      <metric name="Group" value="100%" />
     </scope>
-    <scope type="group" name="$unit::Coverage#(4)::cg_controller_meta">
-      <metric name="Group" value="50.7812%" />
-    </scope>
-    <scope type="group" name="$unit::Coverage#(4)::cg_periph_meta">
-      <metric name="Group" value="50.7812%" />
+    <scope type="group" name="$unit::module_coverage#(4)::cg_tr_messages">
+      <metric name="Group" value="100%" />
     </scope>
   </scope>
   <scope type="assert" name="Statistics">

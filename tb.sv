@@ -195,12 +195,40 @@ virtual class spi_transactor
 	pure virtual task run();
 
 endclass : spi_transactor
+// This class would need a top-top module with a way to supervise all instances of a top module
+// each top module would generate new params
+// the other way would be to grab the generate variables, but it doesn't look like that is ready
+// yet...
+
+// class top_coverage #(parameter MAX_BYTES_PER_CS);
+
+// 		int spi_mode, max_bytes;
+
+// 		function new(parameter SPI_MODE, parameter MAX_BYTES_PER_CS);
+// 			//this.spi_mode = spi_mode;
+// 			// cgmat_nz = new(i);
+// 			// cgmat_z = new(i);
+// 			this.cg_SPIModule_top = new();
+// 			this.spi_mode = SPI_MODE;
+// 			this.max_bytes = MAX_BYTES_PER_CS;
+// 		endfunction
+
+
+// 		covergroup cg_SPIModule_top() @(checker_done);
+// 			// Did we try each SPI mode?
+// 			// How many Max_bytes_per_cs values did we try?
+// 			cp_SPI_MODE: coverpoint spi_mode;
+// 			cp_MAX_BYTES: coverpoint max_bytes;
+// 		endgroup : cg_SPIModule_top
+
+// endclass : top_coverage
 
 // Coverage for the data values
-	class Coverage #(parameter MAX_BYTES_PER_CS	); // make a class for each program
+	class module_coverage #(parameter MAX_BYTES_PER_CS	); // make a class for each program
 
 		event checker_done;
-		int i, spi_mode, max_bytes;
+		int i, max_bytes;
+		int size;
 
 		spi_transaction #(MAX_BYTES_PER_CS) tr;
 
@@ -212,19 +240,13 @@ endclass : spi_transactor
 			//this.spi_mode = spi_mode;
 			// cgmat_nz = new(i);
 			// cgmat_z = new(i);
-			cg_SPIModule_top = new();
+		//	cg_SPIModule_top = new();
 			cg_controller_meta = new();
 			cg_periph_meta = new();
 			cg_tr_messages = new(i);
 		endfunction
-
-
-		covergroup cg_SPIModule_top() @(checker_done);
-			// Did we try each SPI mode?
-			// How many Max_bytes_per_cs values did we try?
-			cp_SPI_MODE: coverpoint spi_mode;
-			cp_MAX_BYTES: coverpoint max_bytes;
-		endgroup : cg_SPIModule_top
+		//function get_size();
+			//this.size = this.tr.data.size();
 
 		covergroup cg_controller_meta() @(checker_done);
 			option.per_instance = 1;
@@ -233,11 +255,25 @@ endclass : spi_transactor
 			cp_ctrlRW: coverpoint tr.operation { 
 			bins ctrl_write = {0};} 
 			// Did we try write then read and read then write?
-			cp_ctrlRW_seq: coverpoint tr.operation; // not sure how to check this yet...
+			cp_ctrlRW_seq: coverpoint tr.operation // not sure how to check this yet...
+			{
+			bins read_write = (0 => 1);
+			bins write_read = (1 => 0);
+			}
 			// What variety in bytes per transaction?
-			cp_msg_size: coverpoint tr.data.size(); // gotta define the bins 
+			cp_msg_size: coverpoint tr.data.size() // gotta define the bins
+			{
+			bins one_byte = {1};
+			bins two_bytes = {2};
+			bins three_bytes = {3};
+			bins four_bytes = {4};
+			} 
 			// What sequence of message sizes did we try?
-			cp_msg_size_seq: coverpoint tr.data.size(); // again, sequential checks are something...
+			cp_msg_size_seq: coverpoint tr.data.size() // again, sequential checks are something...
+			{
+			bins one_to_four = (1 => 4);
+			bins four_to_one = (4 => 1);
+			}
 		endgroup : cg_controller_meta
 
 		covergroup cg_periph_meta() @(checker_done);
@@ -252,15 +288,27 @@ endclass : spi_transactor
 			bins write_read = (1 => 0);
 			}
 			// What variety of bytes per transaction?
-			cp_msg_size: coverpoint tr.data.size();
+			cp_msg_size: coverpoint tr.data.size(){
+			bins one_byte = {1};
+			bins two_bytes = {2};
+			bins three_bytes = {3};
+			bins four_bytes = {4};
+			}
 			// What sequence of message sizes did we try?
-			cp_msg_size_seq: coverpoint tr.data.size();
+			cp_msg_size_seq: coverpoint tr.data.size(){
+			bins one_to_four = (1 => 4);
+			bins four_to_one = (4 => 1);
+			}
 		endgroup : cg_periph_meta
 
 		covergroup cg_tr_messages(int i) @(checker_done);
 			// Did we send all FF's?
 			// Did we send all 00's?
-			cp_tr_data_edge: coverpoint tr.data[i];
+			cp_tr_data_edge: coverpoint tr.data[i]{
+			bins all_zeros = {0};
+			bins all_ones = {8'hFF};
+			bins all_rest = default;
+			}
 		endgroup : cg_tr_messages
 
 		// Good covergroup - checks the following
@@ -298,7 +346,7 @@ endclass : spi_transactor
 		// 	cp_AxB: cross cp_mat_A_zero, cp_mat_B_zero;
 		// endgroup;
 
-	endclass : Coverage
+	endclass : module_coverage
 
 
 class spi_generator #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTES_PER_CS);	
@@ -424,7 +472,7 @@ class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTE
 		trigger_write();
 
 		`DEBUG("Waiting on controller_tx_ready...");
-		@(this.vspi_board_if.cb.controller_tx_ready); //need a different way to do this, can't sample it...
+		@(this.vspi_board_if.cb.controller_tx_ready);
 		@(this.vspi_board_if.cb);
     
 	endtask
@@ -587,7 +635,7 @@ class spi_checker #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
 	spi_transaction #(MAX_BYTES_PER_CS) scb_tr, mon_tr;
 	int errors;
 	int error = 0;
-	Coverage #(MAX_BYTES_PER_CS) cov_objs [MAX_BYTES_PER_CS];
+	module_coverage #(MAX_BYTES_PER_CS) cov_objs [MAX_BYTES_PER_CS];
 	spi_transaction #(MAX_BYTES_PER_CS) static_tr;
 
 	real current_cov_periph, current_cov_control, current_cov_top;
@@ -670,7 +718,7 @@ class environment #(parameter MAX_BYTES_PER_CS);
 	
 	event driver_start, driver_done, monitor_done, checker_done;
 	mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
-	int num_trs = 10;
+	int num_trs = 100;
 
 	function new(virtual spi_board_io#(MAX_BYTES_PER_CS).tb vspi_board_if);
 		this.vspi_board_if = vspi_board_if;
@@ -802,6 +850,8 @@ module tb_top();
 	parameter SPI_MODE = 3;
 	parameter CLKS_PER_HALF_BIT = 4;
 	parameter CS_INACTIVE_CLKS = 10;
+	//top_coverage top_cvg = new(SPI_MODE,MAX_BYTES_PER_CS);
+
 	//int hi;
 
 //	parameter RANDO_PARAM = $urandom_range(0,8);
@@ -814,7 +864,7 @@ module tb_top();
 // 	end
 // endgenerate 
 
-spi_board_io #(MAX_BYTES_PER_CS) spi_board_if();
+	spi_board_io #(MAX_BYTES_PER_CS) spi_board_if();
 
 	SPI_Controller_With_Single_CS #(
 		.SPI_MODE(SPI_MODE),
