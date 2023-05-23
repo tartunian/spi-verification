@@ -1,0 +1,27 @@
+<session version="1.1" release="O-2018.09-SP1" timestp="2023-05-23 03:42:54 GMT">
+  <hvp>
+    <datadef>
+      <metdef name="Group" type="percent" aggregator="average" builtin="1" />
+    </datadef>
+  </hvp>
+  <old_coverage>
+  <scope type="top" name="top">
+    <metric name="Group" value="100%" />
+  </scope>
+  <scope type="instance" name="top">
+  </scope>
+  <scope type="group" name="top">
+    <scope type="group" name="$unit::module_coverage#(4)::cg_controller_meta">
+      <metric name="Group" value="100%" />
+    </scope>
+    <scope type="group" name="$unit::module_coverage#(4)::cg_periph_meta">
+      <metric name="Group" value="100%" />
+    </scope>
+    <scope type="group" name="$unit::module_coverage#(4)::cg_tr_messages">
+      <metric name="Group" value="100%" />
+    </scope>
+  </scope>
+  <scope type="assert" name="Statistics">
+  </scope>
+  </old_coverage>
+</session>
