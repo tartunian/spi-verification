@@ -72,12 +72,14 @@ virtual class spi_transactor
   pure virtual task run();
 
 endclass : spi_transactor
+
+
+// class top_coverage #(parameter MAX_BYTES_PER_CS);
+
 // This class would need a top-top module with a way to supervise all instances of a top module
 // each top module would generate new params
 // the other way would be to grab the generate variables, but it doesn't look like that is ready
 // yet...
-
-// class top_coverage #(parameter MAX_BYTES_PER_CS);
 
 //    int spi_mode, max_bytes;
 
@@ -114,16 +116,10 @@ endclass : spi_transactor
       this.checker_done = checker_done;
       this.tr = tr;
       this.i = i;
-      //this.spi_mode = spi_mode;
-      // cgmat_nz = new(i);
-      // cgmat_z = new(i);
-    //  cg_SPIModule_top = new();
       cg_controller_meta = new();
       cg_periph_meta = new();
       cg_tr_messages = new(i);
     endfunction
-    //function get_size();
-      //this.size = this.tr.data.size();
 
     covergroup cg_controller_meta() @(checker_done);
       option.per_instance = 1;
@@ -166,62 +162,23 @@ endclass : spi_transactor
       }
       // What variety of bytes per transaction?
       cp_msg_size: coverpoint tr.data.size(){
-      bins one_byte = {1};
-      bins two_bytes = {2};
-      bins three_bytes = {3};
-      bins four_bytes = {4};
+      bins range[] = {[1:MAX_BYTES_PER_CS]}; // make a bin for each possible value 
       }
       // What sequence of message sizes did we try?
       cp_msg_size_seq: coverpoint tr.data.size(){
-      bins one_to_four = (1 => 4);
-      bins four_to_one = (4 => 1);
+      bins one_to_four = (1 => MAX_BYTES_PER_CS);
+      bins four_to_one = (MAX_BYTES_PER_CS => 1);
       }
     endgroup : cg_periph_meta
 
     covergroup cg_tr_messages(int i) @(checker_done);
-      // Did we send all FF's?
-      // Did we send all 00's?
       cp_tr_data_edge: coverpoint tr.data[i]{
-      bins all_zeros = {0};
-      bins all_ones = {8'hFF};
+      bins all_zeros = {0};      // Did we send all 00's?
+      bins all_ones = {8'hFF};   // Did we send all FF's?
       bins all_rest = default;
       }
     endgroup : cg_tr_messages
 
-    // Good covergroup - checks the following
-    //  for all i:
-    //  -A[i] happened, -B[i] happened?
-    //  -A[i]x-B[i], -A[i]xB[i], 
-    //    A[i]x-B[i], A[i]xB[i] happened?
-
-    // covergroup cgmat_nz(int i) @(checked);
-    //  option.per_instance = 1;
-    //  cp_mat_A: coverpoint tr.matrixA[i][7];
-    //  cp_mat_B: coverpoint tr.matrixB[i][7];
-    //  cp_mat_C: coverpoint tr.matrixC[i][7];
-    //  // Bad approach example
-    //  // bins signs[] = {[-128:0], [1:$]};
-    //  cp_AxB: cross cp_mat_A, cp_mat_B;
-    // endgroup;
-
-    // Good covergroup - checks the following
-    //  for all i:
-    //  - A[i] == 0, B[i] == 0 happened?
-    //  - A[i]xB[i] happened?
-    
-    // covergroup cgmat_z(int i) @(checked);
-    //  option.per_instance = 1;
-    //  cp_mat_A_zero: coverpoint tr.matrixA[i]{
-    //    bins zero = {0};
-    //  }
-    //  cp_mat_B_zero: coverpoint tr.matrixB[i]{
-    //    bins zero = {0};
-    //  }
-    //  cp_mat_C_zero: coverpoint tr.matrixC[i]{
-    //    bins zero = {0};
-    //  }
-    //  cp_AxB: cross cp_mat_A_zero, cp_mat_B_zero;
-    // endgroup;
 
   endclass : module_coverage
 
@@ -267,15 +224,6 @@ class spi_generator #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_B
 
 endclass : spi_generator
   
-  // covergroup data_array_cg with function sample(byte b);
-  //  coverpoint b;
-  // endgroup : data_array_cg
-  
-/*  covergroup other_tr_cg();
-    coverpoint tr.operation;
-    coverpoint tr.data.size();
-  endgroup : other_tr_cg
-*/
 class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTES_PER_CS);
   import utils_pkg::*;
 
@@ -283,8 +231,6 @@ class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTE
   mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv;
   event driver_start, driver_done, monitor_step_done;
   
-//  data_array_cg dude;
-
   int i = 0;
 
   function new(  virtual spi_board_io#(MAX_BYTES_PER_CS).tb vspi_board_if, 
@@ -294,7 +240,6 @@ class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTE
     this.gen2drv = gen2drv;
     this.driver_start = driver_start;
     this.driver_done = driver_done;   
-    //this.dude = new();
   endfunction : new
 
   task reset();
@@ -381,8 +326,6 @@ class spi_driver #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYTE
       ->driver_start;
       `DEBUG("(event) driver_start");
 
-//      foreach(tr.data[i]) dude.sample(tr.data[i]);
-//      $display("coverage: %0f",dude.get_inst_coverage());
       write_array(tr.operation, tr.data);
 
       ->driver_done;
@@ -432,7 +375,6 @@ class spi_monitor #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
   virtual spi_board_io#(MAX_BYTES_PER_CS).tb vspi_board_if;
   mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2mon, mon2chk;
   event driver_start, driver_done, monitor_done;
-  //coverage cover1;
   int i = 0;
 
   function new(  virtual spi_board_io#(MAX_BYTES_PER_CS).tb vspi_board_if, 
@@ -454,7 +396,6 @@ class spi_monitor #(parameter MAX_BYTES_PER_CS) extends spi_transactor #(MAX_BYT
       
       `DEBUG("Got transaction from gen2mon");
       tr.print();
-    //  cover1.tr = this.tr
 
       `DEBUG($sformatf("Waiting for driver_start..."));
       wait(driver_start.triggered);
@@ -591,7 +532,6 @@ class environment #(parameter MAX_BYTES_PER_CS);
   spi_driver #(MAX_BYTES_PER_CS) drv;
   spi_monitor #(MAX_BYTES_PER_CS) mon;
   spi_checker #(MAX_BYTES_PER_CS) chk;
-  //Coverage #(MAX_BYTES_PER_CS) cvr;
   
   event driver_start, driver_done, monitor_done, checker_done;
   mailbox #(spi_transaction #(MAX_BYTES_PER_CS)) gen2drv, gen2scb, gen2mon, scb2chk, mon2chk;
@@ -612,7 +552,6 @@ class environment #(parameter MAX_BYTES_PER_CS);
     drv = new(vspi_board_if, gen2drv, driver_start, driver_done);
     mon = new(vspi_board_if, gen2mon, mon2chk, driver_start, driver_done, monitor_done);
     chk = new(scb2chk, mon2chk, driver_done, monitor_done, checker_done);
-    //cvr = new(checker_done, 1, spi_mode, max_bytes)
   endfunction : build
 
   task run();
@@ -671,8 +610,6 @@ class environment #(parameter MAX_BYTES_PER_CS);
     end
 
     `DEBUG($sformatf("TOTAL ERRORS: %3d/%3d (%5f%% )", chk.errors, num_trs, (chk.errors/num_trs)*100));
-
-  //  this.drv.data_array_cg
 
   endtask : wrap_up
 
