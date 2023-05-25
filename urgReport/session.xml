@@ -1,4 +1,4 @@
-<session version="1.1" release="O-2018.09-SP1" timestp="2023-05-23 03:42:54 GMT">
+<session version="1.1" release="O-2018.09-SP1" timestp="2023-05-25 18:27:51 GMT">
   <hvp>
     <datadef>
       <metdef name="Group" type="percent" aggregator="average" builtin="1" />
@@ -11,13 +11,13 @@
   <scope type="instance" name="top">
   </scope>
   <scope type="group" name="top">
-    <scope type="group" name="$unit::module_coverage#(4)::cg_controller_meta">
+    <scope type="group" name="tb_pkg::module_coverage#(4)::cg_controller_meta">
       <metric name="Group" value="100%" />
     </scope>
-    <scope type="group" name="$unit::module_coverage#(4)::cg_periph_meta">
+    <scope type="group" name="tb_pkg::module_coverage#(4)::cg_periph_meta">
       <metric name="Group" value="100%" />
     </scope>
-    <scope type="group" name="$unit::module_coverage#(4)::cg_tr_messages">
+    <scope type="group" name="tb_pkg::module_coverage#(4)::cg_tr_messages">
       <metric name="Group" value="100%" />
     </scope>
   </scope>
