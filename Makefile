@@ -1,8 +1,8 @@
 # Makefile for SystemVerilog Lab1
 RTL= ./dut/*.v
 		
-SVTB = ./top.sv \
-./utils_pkg.sv \
+SVTB = ./utils_pkg.sv \
+./top.sv \
 ./ifc.sv \
 ./tb_pkg.sv \
 ./tb.sv
