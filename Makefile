@@ -1,7 +1,11 @@
 # Makefile for SystemVerilog Lab1
 RTL= ./dut/*.v
 		
-SVTB = ./tb.sv
+SVTB = ./top.sv \
+./utils_pkg.sv \
+./ifc.sv \
+./tb_pkg.sv \
+./tb.sv
 SEED = 151
 
 default: test 
